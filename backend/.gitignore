@@ -1,0 +1,46 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Caches and virtual environments
+.pytest_cache/
+.ruff_cache/
+.venv/
+env/
+venv/
+ENV/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Dynamic runtime session state and event logs
+session_state.json
+session_events.jsonl
+examination_plan.json
+data/
+uploads/
+
+# Environment secrets and local overrides
+.env
+.env.local
+!.env.example
+
+# macOS metadata
+.DS_Store

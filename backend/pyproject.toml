@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retain-mind-backend"
+version = "0.1.0"
+description = "RetainMind Socratic Voice AI Oral Examiner Backend"
+requires-python = ">=3.10, <3.15"
+
+dependencies = [
+    "livekit-agents>=1.6.9",
+    "livekit-plugins-ai-coustics~=0.2",
+    "livekit-plugins-deepgram>=0.7",
+    "livekit-plugins-elevenlabs>=1.7.1",
+    "livekit-plugins-google>=0.8",
+    "livekit-plugins-openai>=0.10",
+    "neo4j>=6.2.0",
+    "pydantic>=2.13.4",
+    "pypdf>=6.16.2",
+    "aiohttp>=3.9.0",
+    "python-dotenv",
+    "qdrant-client>=1.19.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+]
+
+[tool.uv]
+# yarl 1.24.1 was published with only a cp310 wheel and no sdist, so it can't
+# install on Python 3.11+. Remove this once upstream uploads the remaining wheels.
+constraint-dependencies = ["yarl<1.24"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "B", "A", "C4", "UP", "SIM", "RUF"]
+ignore = ["E501"]  # Line too long (handled by formatter)
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
