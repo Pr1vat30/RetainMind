@@ -37,8 +37,8 @@ async def main() -> None:
     parser.add_argument(
         "--model",
         type=str,
-        default="gemini-3.5-flash-lite",
-        help="LLM model name for concept extraction (default: gemini-3.5-flash-lite)",
+        default="gemini-3.8-flash",
+        help="LLM model name for concept extraction (default: gemini-3.8-flash)",
     )
 
     args = parser.parse_args()

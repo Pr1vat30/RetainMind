@@ -1,4 +1,4 @@
-# RetainMind (`retain_mind_def`)
+# RetainMind (`retain_mind`)
 
 Assistente Vocale Socratico AI per Esami Orali Universitari — Sistema Completo Frontend Flutter + Backend LiveKit Agents.
 
@@ -9,7 +9,7 @@ Assistente Vocale Socratico AI per Esami Orali Universitari — Sistema Completo
 Il progetto unifica il client frontend in Flutter e il backend vocale intelligente:
 
 ```text
-retain_mind_def/
+retain_mind/
 ├── lib/                              # Frontend Flutter
 │   ├── main.dart                     # Entry point Material 3 Dark Academic
 │   ├── constants.dart                # Palette, stati FSM e configurazione host

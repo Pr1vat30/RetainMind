@@ -58,6 +58,10 @@ class _GrokAvatarState extends State<GrokAvatar>
   Timer? _gazeTimer;
   Timer? _gestureTimer;
 
+  // Pointer tracking throttle — limits setState to ~30fps (33ms) to avoid
+  // 60-120 layout passes per second on drag/hover (significant on Android mid-range).
+  int _lastPointerUpdateMs = 0;
+
   @override
   void initState() {
     super.initState();
@@ -320,6 +324,7 @@ class _GrokAvatarState extends State<GrokAvatar>
       AvatarGesture.curiousTilt => 680,
       AvatarGesture.shake => 440,
       AvatarGesture.ponder => 600,
+      AvatarGesture.wink => 640,
       AvatarGesture.none => 300,
     };
     _gestureController.duration = Duration(milliseconds: durationMs);
@@ -334,6 +339,12 @@ class _GrokAvatarState extends State<GrokAvatar>
 
   void _handlePointerMove(Offset localPos) {
     if (!widget.enableInteractiveGaze) return;
+
+    // Throttle to ~30fps (33ms) to avoid excessive setState calls on drag/hover.
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastPointerUpdateMs < 33) return;
+    _lastPointerUpdateMs = nowMs;
+
     final half = widget.size / 2;
     final dx = ((localPos.dx - half) / half).clamp(-1.2, 1.2);
     final dy = ((localPos.dy - half) / half).clamp(-1.2, 1.2);
@@ -518,10 +529,24 @@ class _GrokAvatarState extends State<GrokAvatar>
                     gestureEyeScale = -ponderProg * 0.08;
                     break;
 
+                  case AvatarGesture.wink:
+                    // Playful wink with head tilt, perk bounce & luminous aura
+                    final winkProg = math.sin(gVal * math.pi);
+                    gestureRoll = winkProg * 8.0;
+                    gesturePitch = -winkProg * 3.0;
+                    gestureFloat = -winkProg * 7.0;
+                    gestureGlow = 1.0 + (winkProg * 0.95);
+                    gestureScaleX = winkProg * 0.04;
+                    gestureScaleY = -winkProg * 0.03;
+                    break;
+
                   case AvatarGesture.none:
                     break;
                 }
               }
+
+              final isWinking = _currentGesture == AvatarGesture.wink && _gestureController.isAnimating;
+              final winkAmount = isWinking ? math.sin(gVal * math.pi) : 0.0;
 
               // 7. Dynamic Gaze Saccade Interpolation
               final tGaze = Curves.fastOutSlowIn.transform(_gazeController.value);
@@ -529,7 +554,7 @@ class _GrokAvatarState extends State<GrokAvatar>
 
               // 8. Composite Head Gaze (Base + Saccade Offset + Gesture + Interactive + Breath + Speech)
               final finalGaze = basePose.gaze.offset(
-                yaw: activeGazeOffset.yaw + gestureYaw + _interactiveGaze.yaw,
+                yaw: activeGazeOffset.yaw + gestureYaw + _interactiveGaze.yaw - (winkAmount * 3.0),
                 pitch: activeGazeOffset.pitch + (breath * 1.5) + listeningNod +
                     speechPitchOffset + gesturePitch + _interactiveGaze.pitch,
                 roll: activeGazeOffset.roll + gestureRoll + _interactiveGaze.roll,
@@ -537,14 +562,16 @@ class _GrokAvatarState extends State<GrokAvatar>
 
               // 9. Composite Eye Configuration
               final leftEye = basePose.leftEye.copyWith(
-                open: (basePose.leftEye.open * blinkFactor).clamp(0.0, 1.0),
+                open: (basePose.leftEye.open * blinkFactor * (1.0 + winkAmount * 0.15)).clamp(0.0, 1.0),
                 height: basePose.leftEye.height * (1.0 + gestureEyeScale + speechEyeExpand),
-                arch: (basePose.leftEye.arch + gestureEyeArch).clamp(-1.0, 1.0),
+                arch: (basePose.leftEye.arch + gestureEyeArch + winkAmount * 0.15).clamp(-1.0, 1.0),
+                tilt: basePose.leftEye.tilt + winkAmount * 4.0,
               );
               final rightEye = basePose.rightEye.copyWith(
-                open: (basePose.rightEye.open * blinkFactor).clamp(0.0, 1.0),
+                open: (basePose.rightEye.open * blinkFactor * (1.0 - winkAmount * 0.92)).clamp(0.08, 1.0),
                 height: basePose.rightEye.height * (1.0 + gestureEyeScale + speechEyeExpand),
-                arch: (basePose.rightEye.arch + gestureEyeArch).clamp(-1.0, 1.0),
+                arch: (basePose.rightEye.arch + gestureEyeArch + winkAmount * 0.95).clamp(-1.0, 1.0),
+                tilt: basePose.rightEye.tilt - winkAmount * 10.0,
               );
 
               // 10. Buoyant Squash & Stretch (Inertia physics matching vertical motion)
@@ -561,7 +588,7 @@ class _GrokAvatarState extends State<GrokAvatar>
                 glowIntensity: basePose.glowIntensity * gestureGlow,
               );
 
-              final glow = widget.glowColor ?? AppConstants.primaryGlow;
+              final glow = widget.glowColor ?? context.colors.primaryGlow;
 
               return CustomPaint(
                 size: Size(widget.size, widget.size),
@@ -588,6 +615,22 @@ class _BloubAvatarPainter extends CustomPainter {
   final bool isSpeaking;
   final bool isListening;
 
+  static final Paint _whiteFillPaint = Paint()
+    ..color = Colors.white
+    ..style = PaintingStyle.fill;
+
+  static final Paint _ringStrokePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2.0;
+
+  static final Paint _sparkPaint = Paint()..style = PaintingStyle.fill;
+  static final Paint _dotGlowPaint = Paint()..style = PaintingStyle.fill;
+  static final Paint _auraPaint = Paint()..style = PaintingStyle.fill;
+  static final Paint _bodyPaint = Paint()..style = PaintingStyle.fill;
+  static final Paint _rimPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.8;
+
   _BloubAvatarPainter({
     required this.pose,
     required this.glowColor,
@@ -606,21 +649,17 @@ class _BloubAvatarPainter extends CustomPainter {
     final auraAlphaBase = isSpeaking ? 0.48 : (isListening ? 0.38 : 0.22);
     final auraAlpha = (auraAlphaBase * pose.glowIntensity * auraPulse).clamp(0.0, 1.0);
 
-    final auraPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          glowColor.withValues(alpha: auraAlpha),
-          glowColor.withValues(alpha: 0.0),
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: radius * 1.65));
-    canvas.drawCircle(center, radius * 1.65, auraPaint);
+    _auraPaint.shader = RadialGradient(
+      colors: [
+        glowColor.withValues(alpha: auraAlpha),
+        glowColor.withValues(alpha: 0.0),
+      ],
+    ).createShader(Rect.fromCircle(center: center, radius: radius * 1.65));
+    canvas.drawCircle(center, radius * 1.65, _auraPaint);
 
     // 2. Orbit Ring & Luminous Comet Trail (Thinking / Evaluating state)
     if (pose.hasOrbitRing) {
-      final ringPaint = Paint()
-        ..color = glowColor.withValues(alpha: 0.35)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0;
+      _ringStrokePaint.color = glowColor.withValues(alpha: 0.35);
 
       final ringRect = Rect.fromCenter(
         center: center,
@@ -632,7 +671,7 @@ class _BloubAvatarPainter extends CustomPainter {
       canvas.translate(center.dx, center.dy);
       canvas.rotate(-0.35); // tilt orbit
       canvas.translate(-center.dx, -center.dy);
-      canvas.drawOval(ringRect, ringPaint);
+      canvas.drawOval(ringRect, _ringStrokePaint);
 
       final angle = loopProgress * 2 * math.pi;
 
@@ -645,23 +684,20 @@ class _BloubAvatarPainter extends CustomPainter {
         final tAngle = angle - trailOffsets[i];
         final tx = center.dx + (radius * 1.175) * math.cos(tAngle);
         final ty = center.dy + (radius * 0.575) * math.sin(tAngle);
-        final sparkPaint = Paint()
-          ..color = glowColor.withValues(alpha: trailAlphas[i]);
-        canvas.drawCircle(Offset(tx, ty), trailSizes[i], sparkPaint);
+        _sparkPaint.color = glowColor.withValues(alpha: trailAlphas[i]);
+        canvas.drawCircle(Offset(tx, ty), trailSizes[i], _sparkPaint);
       }
 
       // Main orbiting satellite dot
       final px = center.dx + (radius * 1.175) * math.cos(angle);
       final py = center.dy + (radius * 0.575) * math.sin(angle);
 
-      final dotGlow = Paint()
-        ..shader = RadialGradient(
-          colors: [glowColor, glowColor.withValues(alpha: 0.0)],
-        ).createShader(Rect.fromCircle(center: Offset(px, py), radius: 14));
-      canvas.drawCircle(Offset(px, py), 14, dotGlow);
+      _dotGlowPaint.shader = RadialGradient(
+        colors: [glowColor, glowColor.withValues(alpha: 0.0)],
+      ).createShader(Rect.fromCircle(center: Offset(px, py), radius: 14));
+      canvas.drawCircle(Offset(px, py), 14, _dotGlowPaint);
 
-      final dotSolid = Paint()..color = Colors.white;
-      canvas.drawCircle(Offset(px, py), 4.2, dotSolid);
+      canvas.drawCircle(Offset(px, py), 4.2, _whiteFillPaint);
       canvas.restore();
     }
 
@@ -671,35 +707,31 @@ class _BloubAvatarPainter extends CustomPainter {
     canvas.scale(pose.bodyScaleX, pose.bodyScaleY);
 
     // Deep sleek ink sphere with 3D spherical gradient
-    final bodyPaint = Paint()
-      ..shader = RadialGradient(
-        center: const Alignment(-0.35, -0.40),
-        radius: 0.95,
-        colors: [
-          const Color(0xFF2E3856), // Subtle highlight
-          const Color(0xFF131722), // Deep body
-          const Color(0xFF090B10), // Shadow
-        ],
-        stops: const [0.0, 0.65, 1.0],
-      ).createShader(Rect.fromCircle(center: Offset.zero, radius: radius));
+    _bodyPaint.shader = RadialGradient(
+      center: const Alignment(-0.35, -0.40),
+      radius: 0.95,
+      colors: const [
+        Color(0xFF2E3856), // Subtle highlight
+        Color(0xFF131722), // Deep body
+        Color(0xFF090B10), // Shadow
+      ],
+      stops: const [0.0, 0.65, 1.0],
+    ).createShader(Rect.fromCircle(center: Offset.zero, radius: radius));
 
-    canvas.drawCircle(Offset.zero, radius, bodyPaint);
+    canvas.drawCircle(Offset.zero, radius, _bodyPaint);
 
     // Outer edge rim light
-    final rimPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8
-      ..shader = RadialGradient(
-        center: const Alignment(-0.3, -0.4),
-        radius: 1.0,
-        colors: [
-          glowColor.withValues(alpha: 0.75),
-          glowColor.withValues(alpha: 0.18),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.5, 1.0],
-      ).createShader(Rect.fromCircle(center: Offset.zero, radius: radius));
-    canvas.drawCircle(Offset.zero, radius, rimPaint);
+    _rimPaint.shader = RadialGradient(
+      center: const Alignment(-0.3, -0.4),
+      radius: 1.0,
+      colors: [
+        glowColor.withValues(alpha: 0.75),
+        glowColor.withValues(alpha: 0.18),
+        Colors.transparent,
+      ],
+      stops: const [0.0, 0.5, 1.0],
+    ).createShader(Rect.fromCircle(center: Offset.zero, radius: radius));
+    canvas.drawCircle(Offset.zero, radius, _rimPaint);
 
     // 4. Render Projected Capsule Eyes
     final (eye0, eye1) = computeEyePoses(pose.gaze, radius);
@@ -718,9 +750,11 @@ class _BloubAvatarPainter extends CustomPainter {
     if (eyePose.depth <= 0) return; // Behind sphere
 
     final eyeWidth = sphereRadius * cfg.width;
-    final eyeHeight = sphereRadius * cfg.height * cfg.open;
+    final eyeHeight = cfg.arch.abs() > 0.04
+        ? math.max(sphereRadius * cfg.height * cfg.open, sphereRadius * cfg.height * 0.16)
+        : sphereRadius * cfg.height * cfg.open;
 
-    if (eyeHeight < 0.8) return; // Fully closed during blink
+    if (eyeHeight < 0.8 && cfg.arch.abs() <= 0.04) return; // Fully closed during blink
 
     canvas.save();
     // 1. Move to projected eye center on sphere
@@ -740,10 +774,6 @@ class _BloubAvatarPainter extends CustomPainter {
     if (cfg.tilt != 0.0) {
       canvas.rotate(cfg.tilt * math.pi / 180.0);
     }
-
-    final eyePaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
 
     final halfW = eyeWidth / 2;
     final halfH = eyeHeight / 2;
@@ -766,7 +796,7 @@ class _BloubAvatarPainter extends CustomPainter {
           clockwise: true,
         )
         ..close();
-      canvas.drawPath(path, eyePaint);
+      canvas.drawPath(path, _whiteFillPaint);
     } else {
       final eyeRect = Rect.fromCenter(
         center: Offset.zero,
@@ -777,12 +807,22 @@ class _BloubAvatarPainter extends CustomPainter {
         eyeRect,
         Radius.circular(halfW),
       );
-      canvas.drawRRect(eyeRRect, eyePaint);
+      canvas.drawRRect(eyeRRect, _whiteFillPaint);
     }
 
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _BloubAvatarPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _BloubAvatarPainter oldDelegate) {
+    // Only repaint when the data that drives the visual output has actually changed.
+    // Comparing the pose object is sufficient because AnimatedBuilder already invalidates
+    // the widget on every animation tick — this prevents the painter from being unnecessarily
+    // re-evaluated when Flutter decides to mark the layer dirty for other reasons.
+    return oldDelegate.pose != pose ||
+        oldDelegate.glowColor != glowColor ||
+        oldDelegate.loopProgress != loopProgress ||
+        oldDelegate.isSpeaking != isSpeaking ||
+        oldDelegate.isListening != isListening;
+  }
 }

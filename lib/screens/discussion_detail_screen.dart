@@ -5,7 +5,7 @@ import '../constants.dart';
 import '../models/session_models.dart';
 import '../providers/exam_provider.dart';
 import '../widgets/transcript_bubble.dart';
-import 'exam_screen.dart';
+import '../widgets/exam_launch_loader.dart';
 
 class DiscussionDetailScreen extends StatefulWidget {
   final SessionHistoryItem item;
@@ -21,6 +21,7 @@ class DiscussionDetailScreen extends StatefulWidget {
 
 class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
     with SingleTickerProviderStateMixin {
+  AppColors get colors => context.colors;
   late TabController _tabController;
   int _transcriptFilterIndex = 0; // 0: Tutti, 1: Corrette, 2: Da rivedere / Aiuti
 
@@ -39,18 +40,17 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
   Future<void> _resumeExam() async {
     final exam = context.read<ExamProvider>();
     try {
-      await exam.resumeExamAndConnect(courseId: widget.item.id);
-      if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ExamScreen()),
-        );
-      }
+      await launchExamWithLoader(
+        context,
+        onConnect: () => exam.resumeExamAndConnect(courseId: widget.item.id),
+        initialSubtitle: 'Caricamento informazioni e messaggi...',
+        completedSubtitle: 'Pronto! Si comincia 😉',
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: AppConstants.error,
+            backgroundColor: colors.error,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusSm)),
             content: Text(exam.errorMessage ?? e.toString()),
@@ -63,18 +63,19 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
   Future<void> _repeatExam({bool adapt = true}) async {
     final exam = context.read<ExamProvider>();
     try {
-      await exam.startNewExam(adapt: adapt, courseId: widget.item.id);
-      if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ExamScreen()),
-        );
-      }
+      await launchExamWithLoader(
+        context,
+        onConnect: () => exam.startNewExam(adapt: adapt, courseId: widget.item.id),
+        initialSubtitle: adapt
+            ? 'Preparazione ripetizione adattiva...'
+            : 'Ricomincio la simulazione sul corso...',
+        completedSubtitle: 'Pronto! Si comincia 😉',
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: AppConstants.error,
+            backgroundColor: colors.error,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusSm)),
             content: Text(exam.errorMessage ?? e.toString()),
@@ -151,7 +152,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Note di studio copiate negli appunti in formato Markdown (.md)!'),
-        backgroundColor: AppConstants.surfaceContainerHighest,
+        backgroundColor: colors.surfaceContainerHighest,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusSm)),
       ),
@@ -171,12 +172,12 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
         : widget.item.timestamp;
 
     return Scaffold(
-      backgroundColor: AppConstants.background,
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: AppConstants.background,
+        backgroundColor: colors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: AppConstants.textPrimary),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: colors.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
@@ -184,8 +185,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
           children: [
             Text(
               widget.item.title,
-              style: const TextStyle(
-                color: AppConstants.textPrimary,
+              style: TextStyle(
+                color: colors.textPrimary,
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
                 letterSpacing: -0.3,
@@ -195,8 +196,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
             if (dateText.isNotEmpty)
               Text(
                 '$dateText • ${widget.item.turnsCompleted} scambi',
-                style: const TextStyle(
-                  color: AppConstants.textSecondary,
+                style: TextStyle(
+                  color: colors.textSecondary,
                   fontSize: 11.5,
                   fontWeight: FontWeight.normal,
                 ),
@@ -205,25 +206,25 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_outline_rounded, color: AppConstants.error, size: 21),
+            icon: Icon(Icons.delete_outline_rounded, color: colors.error, size: 21),
             tooltip: 'Elimina discussione dal server',
             onPressed: () async {
               final confirmed = await showDialog<bool>(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  backgroundColor: AppConstants.surfaceContainerHigh,
+                  backgroundColor: colors.surfaceContainerHigh,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppConstants.radiusCard),
-                    side: const BorderSide(color: AppConstants.outlineCard),
+                    side: BorderSide(color: colors.outlineCard),
                   ),
-                  title: const Row(
+                  title: Row(
                     children: [
-                      Icon(Icons.delete_outline_rounded, color: AppConstants.error, size: 22),
+                      Icon(Icons.delete_outline_rounded, color: colors.error, size: 22),
                       SizedBox(width: 8),
                       Text(
                         'Elimina discussione',
                         style: TextStyle(
-                          color: AppConstants.textPrimary,
+                          color: colors.textPrimary,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
@@ -232,17 +233,17 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                   ),
                   content: Text(
                     'Eliminare definitivamente la discussione #${widget.item.iteration} dal server?',
-                    style: const TextStyle(color: AppConstants.textSecondary, fontSize: 13, height: 1.4),
+                    style: TextStyle(color: colors.textSecondary, fontSize: 13, height: 1.4),
                   ),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('Annulla', style: TextStyle(color: AppConstants.textSecondary)),
+                      child: Text('Annulla', style: TextStyle(color: colors.textSecondary)),
                     ),
                     ElevatedButton(
                       onPressed: () => Navigator.pop(ctx, true),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppConstants.error,
+                        backgroundColor: colors.error,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
@@ -266,8 +267,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: (isCur
-                      ? (isPaused ? AppConstants.warning : AppConstants.primaryContainer)
-                      : AppConstants.success)
+                      ? (isPaused ? colors.warning : colors.primaryContainer)
+                      : colors.success)
                   .withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(AppConstants.radiusPill),
             ),
@@ -277,8 +278,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                   : 'Completata',
               style: TextStyle(
                 color: isCur
-                    ? (isPaused ? AppConstants.warning : AppConstants.primaryContainer)
-                    : AppConstants.success,
+                    ? (isPaused ? colors.warning : colors.primaryContainer)
+                    : colors.success,
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
               ),
@@ -295,12 +296,12 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppConstants.surfaceContainerLow,
+                  color: colors.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(AppConstants.radiusCard),
                   border: Border.all(
                     color: isCur
-                        ? AppConstants.primaryContainer.withValues(alpha: 0.4)
-                        : AppConstants.outlineCard,
+                        ? colors.primaryContainer.withValues(alpha: 0.4)
+                        : colors.outlineCard,
                   ),
                 ),
                 child: Row(
@@ -309,12 +310,12 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                       width: 36,
                       height: 36,
                       decoration: BoxDecoration(
-                        color: AppConstants.surfaceContainerHigh,
+                        color: colors.surfaceContainerHigh,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
                         isCur ? Icons.mic_rounded : Icons.history_edu_rounded,
-                        color: AppConstants.primary,
+                        color: colors.primary,
                         size: 19,
                       ),
                     ),
@@ -325,8 +326,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                         children: [
                           Text(
                             'Discussione #${widget.item.iteration}',
-                            style: const TextStyle(
-                              color: AppConstants.textPrimary,
+                            style: TextStyle(
+                              color: colors.textPrimary,
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
                             ),
@@ -335,8 +336,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                           const SizedBox(height: 2),
                           Text(
                             '${widget.item.turnsCompleted} scambi • ${dateText.isNotEmpty ? dateText : "Recente"}',
-                            style: const TextStyle(
-                              color: AppConstants.textSecondary,
+                            style: TextStyle(
+                              color: colors.textSecondary,
                               fontSize: 11.5,
                             ),
                             overflow: TextOverflow.ellipsis,
@@ -349,8 +350,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
                           color: (widget.item.averageMastery! >= 0.70
-                                  ? AppConstants.success
-                                  : AppConstants.warning)
+                                  ? colors.success
+                                  : colors.warning)
                               .withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                         ),
@@ -363,16 +364,16 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                                   : Icons.speed_rounded,
                               size: 13,
                               color: widget.item.averageMastery! >= 0.70
-                                  ? AppConstants.success
-                                  : AppConstants.warning,
+                                  ? colors.success
+                                  : colors.warning,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               '${(widget.item.averageMastery! * 100).toInt()}%',
                               style: TextStyle(
                                 color: widget.item.averageMastery! >= 0.70
-                                    ? AppConstants.success
-                                    : AppConstants.warning,
+                                    ? colors.success
+                                    : colors.warning,
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -389,18 +390,18 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: AppConstants.surfaceContainerLow,
+                color: colors.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                border: Border.all(color: AppConstants.outlineCard),
+                border: Border.all(color: colors.outlineCard),
               ),
               child: TabBar(
                 controller: _tabController,
                 indicator: BoxDecoration(
-                  color: AppConstants.primaryContainer,
+                  color: colors.primaryContainer,
                   borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                 ),
-                labelColor: AppConstants.onPrimaryContainer,
-                unselectedLabelColor: AppConstants.textSecondary,
+                labelColor: colors.onPrimaryContainer,
+                unselectedLabelColor: colors.textSecondary,
                 labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                 indicatorSize: TabBarIndicatorSize.tab,
@@ -445,8 +446,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
             Container(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
               decoration: BoxDecoration(
-                color: AppConstants.background,
-                border: const Border(top: BorderSide(color: AppConstants.outlineCard)),
+                color: colors.background,
+                border: Border(top: BorderSide(color: colors.outlineCard)),
               ),
               child: !isCompleted
                   ? Row(
@@ -463,8 +464,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppConstants.primaryContainer,
-                                foregroundColor: AppConstants.onPrimary,
+                                backgroundColor: colors.primaryContainer,
+                                foregroundColor: colors.onPrimary,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                                 ),
@@ -485,8 +486,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
                               ),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: AppConstants.textSecondary,
-                                side: const BorderSide(color: AppConstants.outlineCard),
+                                foregroundColor: colors.textSecondary,
+                                side: BorderSide(color: colors.outlineCard),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                                 ),
@@ -507,10 +508,10 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppConstants.primaryContainer,
-                          foregroundColor: AppConstants.onPrimary,
+                          backgroundColor: colors.primaryContainer,
+                          foregroundColor: colors.onPrimary,
                           elevation: 6,
-                          shadowColor: AppConstants.primaryContainer.withValues(alpha: 0.4),
+                          shadowColor: colors.primaryContainer.withValues(alpha: 0.4),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                           ),
@@ -682,9 +683,9 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppConstants.surfaceContainerLow,
+        color: colors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppConstants.radiusHero),
-        border: Border.all(color: AppConstants.outlineCard),
+        border: Border.all(color: colors.outlineCard),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -701,8 +702,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
-                          color: AppConstants.textPrimary,
+                        style: TextStyle(
+                          color: colors.textPrimary,
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
                         ),
@@ -712,8 +713,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                       const SizedBox(height: 2),
                       Text(
                         'Studente: $studentId • $dateDisplay',
-                        style: const TextStyle(
-                          color: AppConstants.textSecondary,
+                        style: TextStyle(
+                          color: colors.textSecondary,
                           fontSize: 11.5,
                         ),
                       ),
@@ -723,14 +724,14 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppConstants.surfaceContainerHigh,
+                    color: colors.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                    border: Border.all(color: AppConstants.outlineCard),
+                    border: Border.all(color: colors.outlineCard),
                   ),
                   child: Text(
                     'Iterazione #${widget.item.iteration}',
-                    style: const TextStyle(
-                      color: AppConstants.primary,
+                    style: TextStyle(
+                      color: colors.primary,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -767,16 +768,16 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
               borderRadius: BorderRadius.circular(AppConstants.radiusCard),
               border: Border.all(
                 color: isUnrated
-                    ? AppConstants.primaryContainer.withValues(alpha: 0.5)
+                    ? colors.primaryContainer.withValues(alpha: 0.5)
                     : (isPassed
-                        ? AppConstants.success.withValues(alpha: 0.5)
-                        : AppConstants.warning.withValues(alpha: 0.5)),
+                        ? colors.success.withValues(alpha: 0.5)
+                        : colors.warning.withValues(alpha: 0.5)),
               ),
               boxShadow: [
                 BoxShadow(
                   color: (isUnrated
-                          ? AppConstants.primaryContainer
-                          : (isPassed ? AppConstants.success : AppConstants.warning))
+                          ? colors.primaryContainer
+                          : (isPassed ? colors.success : colors.warning))
                       .withValues(alpha: 0.15),
                   blurRadius: 18,
                   offset: const Offset(0, 6),
@@ -792,13 +793,13 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: (isUnrated
-                            ? AppConstants.primaryContainer
-                            : (isPassed ? AppConstants.success : AppConstants.warning))
+                            ? colors.primaryContainer
+                            : (isPassed ? colors.success : colors.warning))
                         .withValues(alpha: 0.20),
                     border: Border.all(
                       color: (isUnrated
-                              ? AppConstants.primaryContainer
-                              : (isPassed ? AppConstants.success : AppConstants.warning))
+                              ? colors.primaryContainer
+                              : (isPassed ? colors.success : colors.warning))
                           .withValues(alpha: 0.60),
                       width: 1.5,
                     ),
@@ -808,8 +809,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                         ? Icons.pending_actions_rounded
                         : (isPassed ? Icons.celebration_rounded : Icons.school_rounded),
                     color: isUnrated
-                        ? AppConstants.primaryContainer
-                        : (isPassed ? AppConstants.success : AppConstants.warning),
+                        ? colors.primaryContainer
+                        : (isPassed ? colors.success : colors.warning),
                     size: 26,
                   ),
                 ),
@@ -827,8 +828,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                                 : 'NECESSITA DI RECUPERO SUI PREREQUISITI'),
                         style: TextStyle(
                           color: isUnrated
-                              ? AppConstants.primaryContainer
-                              : (isPassed ? AppConstants.success : AppConstants.warning),
+                              ? colors.primaryContainer
+                              : (isPassed ? colors.success : colors.warning),
                           fontSize: 12.5,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.3,
@@ -843,8 +844,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                             : (isPassed
                                 ? 'Ottima preparazione: hai esposto con chiarezza e argomentato bene i concetti.'
                                 : 'Hai affrontato la discussione ma alcune basi chiave richiedono un breve ripasso.'),
-                        style: const TextStyle(
-                          color: AppConstants.textPrimary,
+                        style: TextStyle(
+                          color: colors.textPrimary,
                           fontSize: 11.5,
                           height: 1.3,
                         ),
@@ -875,7 +876,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                     label: 'Copertura',
                     value: '$coveragePercent%',
                     icon: Icons.pie_chart_rounded,
-                    color: AppConstants.primary,
+                    color: colors.primary,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -884,7 +885,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                     label: 'Sicurezza',
                     value: confidenceLevel,
                     icon: Icons.shield_rounded,
-                    color: isPassed ? AppConstants.success : AppConstants.warning,
+                    color: isPassed ? colors.success : colors.warning,
                   ),
                 ),
               ],
@@ -904,9 +905,9 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: AppConstants.surfaceContainerHigh,
+        color: colors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(AppConstants.radiusSm),
-        border: Border.all(color: AppConstants.outlineCard),
+        border: Border.all(color: colors.outlineCard),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -918,7 +919,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(color: AppConstants.textSecondary, fontSize: 10.5),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 10.5),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -927,8 +928,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
-              color: AppConstants.textPrimary,
+            style: TextStyle(
+              color: colors.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.bold,
             ),
@@ -948,11 +949,11 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   'Copertura degli Argomenti',
                   style: TextStyle(
-                    color: AppConstants.textPrimary,
+                    color: colors.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     letterSpacing: -0.2,
@@ -962,7 +963,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                 Text(
                   'Progressione prima e dopo le domande del docente',
                   style: TextStyle(
-                    color: AppConstants.textSecondary,
+                    color: colors.textSecondary,
                     fontSize: 12,
                   ),
                 ),
@@ -971,13 +972,13 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: AppConstants.surfaceContainerHigh,
+                color: colors.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(AppConstants.radiusPill),
               ),
               child: Text(
                 '${topics.length} argomenti',
-                style: const TextStyle(
-                  color: AppConstants.textSecondary,
+                style: TextStyle(
+                  color: colors.textSecondary,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1007,10 +1008,10 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
             final isUntested = status == 'Non ancora affrontato';
 
             final statusColor = isMastered
-                ? AppConstants.success
+                ? colors.success
                 : (isRecovered
-                    ? AppConstants.primary
-                    : (isWeak ? AppConstants.warning : AppConstants.textSecondary));
+                    ? colors.primary
+                    : (isWeak ? colors.warning : colors.textSecondary));
             final statusIcon = isMastered
                 ? Icons.check_circle_rounded
                 : (isRecovered
@@ -1020,9 +1021,9 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
             return Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppConstants.surfaceContainerLow,
+                color: colors.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(AppConstants.radiusCard),
-                border: Border.all(color: AppConstants.outlineCard),
+                border: Border.all(color: colors.outlineCard),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1033,8 +1034,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                       Expanded(
                         child: Text(
                           name,
-                          style: const TextStyle(
-                            color: AppConstants.textPrimary,
+                          style: TextStyle(
+                            color: colors.textPrimary,
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1079,7 +1080,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                             children: [
                               Container(
                                 height: 8,
-                                color: AppConstants.surfaceContainerHigh,
+                                color: colors.surfaceContainerHigh,
                               ),
                               FractionallySizedBox(
                                 widthFactor: isUntested ? 0.0 : after.clamp(0.05, 1.0),
@@ -1112,8 +1113,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                             : '${(before * 100).toInt()}% ➔ ${(after * 100).toInt()}% ($deltaStr)',
                         style: TextStyle(
                           color: isUntested
-                              ? AppConstants.textSecondary
-                              : (delta >= 0 ? AppConstants.textPrimary : AppConstants.warning),
+                              ? colors.textSecondary
+                              : (delta >= 0 ? colors.textPrimary : colors.warning),
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1133,20 +1134,20 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Cosa Ripassare Prima',
           style: TextStyle(
-            color: AppConstants.textPrimary,
+            color: colors.textPrimary,
             fontSize: 16,
             fontWeight: FontWeight.bold,
             letterSpacing: -0.2,
           ),
         ),
         const SizedBox(height: 2),
-        const Text(
+        Text(
           'I prerequisiti fondamentali per sbloccare gli argomenti più difficili',
           style: TextStyle(
-            color: AppConstants.textSecondary,
+            color: colors.textSecondary,
             fontSize: 12,
           ),
         ),
@@ -1160,9 +1161,9 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppConstants.surfaceContainerLow,
+                color: colors.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(AppConstants.radiusCard),
-                border: Border.all(color: AppConstants.warning.withValues(alpha: 0.3)),
+                border: Border.all(color: colors.warning.withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1172,20 +1173,20 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: AppConstants.warning.withValues(alpha: 0.15),
+                          color: colors.warning.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                         ),
-                        child: const Text(
+                        child: Text(
                           'Punto di difficoltà',
-                          style: TextStyle(color: AppConstants.warning, fontSize: 11, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: colors.warning, fontSize: 11, fontWeight: FontWeight.bold),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           failed,
-                          style: const TextStyle(
-                            color: AppConstants.textPrimary,
+                          style: TextStyle(
+                            color: colors.textPrimary,
                             fontSize: 13.5,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1196,14 +1197,14 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                   ),
                   const SizedBox(height: 8),
                   Padding(
-                    padding: const EdgeInsets.only(left: 8),
+                    padding: EdgeInsets.only(left: 8),
                     child: Row(
-                      children: const [
-                        Icon(Icons.arrow_downward_rounded, size: 16, color: AppConstants.primary),
+                      children: [
+                        Icon(Icons.arrow_downward_rounded, size: 16, color: colors.primary),
                         SizedBox(width: 6),
                         Text(
                           'Per capire questo argomento, ripassa prima:',
-                          style: TextStyle(color: AppConstants.textSecondary, fontSize: 11.5, fontStyle: FontStyle.italic),
+                          style: TextStyle(color: colors.textSecondary, fontSize: 11.5, fontStyle: FontStyle.italic),
                         ),
                       ],
                     ),
@@ -1213,19 +1214,19 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: AppConstants.primaryContainer.withValues(alpha: 0.12),
+                      color: colors.primaryContainer.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(AppConstants.radiusSm),
-                      border: Border.all(color: AppConstants.primaryContainer.withValues(alpha: 0.3)),
+                      border: Border.all(color: colors.primaryContainer.withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.menu_book_rounded, color: AppConstants.primary, size: 16),
+                        Icon(Icons.menu_book_rounded, color: colors.primary, size: 16),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             root,
-                            style: const TextStyle(
-                              color: AppConstants.textPrimary,
+                            style: TextStyle(
+                              color: colors.textPrimary,
                               fontSize: 12.5,
                               fontWeight: FontWeight.bold,
                             ),
@@ -1238,7 +1239,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppConstants.surfaceContainerHigh,
+                      color: colors.surfaceContainerHigh,
                       borderRadius: BorderRadius.circular(AppConstants.radiusSm),
                     ),
                     child: Row(
@@ -1249,7 +1250,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                         Expanded(
                           child: Text(
                             'Consiglio di studio: Rileggi le definizioni di "$root" sui tuoi appunti/slide prima di ripetere la simulazione per rispondere con massima sicurezza.',
-                            style: const TextStyle(color: AppConstants.textSecondary, fontSize: 11.5, height: 1.35),
+                            style: TextStyle(color: colors.textSecondary, fontSize: 11.5, height: 1.35),
                           ),
                         ),
                       ],
@@ -1263,9 +1264,9 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppConstants.surfaceContainerLow,
+              color: colors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(AppConstants.radiusCard),
-              border: Border.all(color: AppConstants.outlineCard),
+              border: Border.all(color: colors.outlineCard),
             ),
             child: Row(
               children: [
@@ -1273,13 +1274,13 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: (isUnrated ? AppConstants.primaryContainer : AppConstants.success)
+                    color: (isUnrated ? colors.primaryContainer : colors.success)
                         .withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     isUnrated ? Icons.info_outline_rounded : Icons.check_rounded,
-                    color: isUnrated ? AppConstants.primaryContainer : AppConstants.success,
+                    color: isUnrated ? colors.primaryContainer : colors.success,
                     size: 20,
                   ),
                 ),
@@ -1290,14 +1291,14 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                     children: [
                       Text(
                         isUnrated ? 'In attesa di risposte' : 'Nessun prerequisito mancante',
-                        style: const TextStyle(color: AppConstants.textPrimary, fontSize: 13.5, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: colors.textPrimary, fontSize: 13.5, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         isUnrated
                             ? 'Rispondi alle domande dell\'esaminatore durante la discussione per ricevere consigli di studio mirati.'
                             : 'Hai dimostrato buone basi su tutti i concetti introduttivi e propedeutici.',
-                        style: const TextStyle(color: AppConstants.textSecondary, fontSize: 11.5),
+                        style: TextStyle(color: colors.textSecondary, fontSize: 11.5),
                       ),
                     ],
                   ),
@@ -1318,20 +1319,20 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Confronto con le Prove Precedenti',
           style: TextStyle(
-            color: AppConstants.textPrimary,
+            color: colors.textPrimary,
             fontSize: 16,
             fontWeight: FontWeight.bold,
             letterSpacing: -0.2,
           ),
         ),
         const SizedBox(height: 2),
-        const Text(
+        Text(
           'I tuoi miglioramenti nel tempo rispetto alle simulazioni passate',
           style: TextStyle(
-            color: AppConstants.textSecondary,
+            color: colors.textSecondary,
             fontSize: 12,
           ),
         ),
@@ -1345,7 +1346,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                   metric: deltaPercent >= 0 ? '+$deltaPercent%' : '$deltaPercent%',
                   description: 'Complessiva',
                   icon: deltaPercent >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                  color: deltaPercent >= 0 ? AppConstants.success : AppConstants.warning,
+                  color: deltaPercent >= 0 ? colors.success : colors.warning,
                 ),
               ),
               const SizedBox(width: 8),
@@ -1355,7 +1356,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                   metric: '-45%',
                   description: 'Pause verbali',
                   icon: Icons.speed_rounded,
-                  color: AppConstants.primary,
+                  color: colors.primary,
                 ),
               ),
               const SizedBox(width: 8),
@@ -1374,9 +1375,9 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppConstants.surfaceContainerLow,
+              color: colors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(AppConstants.radiusCard),
-              border: Border.all(color: AppConstants.outlineCard),
+              border: Border.all(color: colors.outlineCard),
             ),
             child: Row(
               children: [
@@ -1384,24 +1385,24 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: AppConstants.primaryContainer.withValues(alpha: 0.15),
+                    color: colors.primaryContainer.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.timeline_rounded, color: AppConstants.primary, size: 20),
+                  child: Icon(Icons.timeline_rounded, color: colors.primary, size: 20),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Prima simulazione registrata',
-                        style: TextStyle(color: AppConstants.textPrimary, fontSize: 13.5, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: colors.textPrimary, fontSize: 13.5, fontWeight: FontWeight.bold),
                       ),
                       SizedBox(height: 2),
                       Text(
                         'Dalla seconda prova vedrai qui il confronto del tuo miglioramento, la riduzione delle pause verbali e i dubbi chiariti.',
-                        style: TextStyle(color: AppConstants.textSecondary, fontSize: 11.5, height: 1.3),
+                        style: TextStyle(color: colors.textSecondary, fontSize: 11.5, height: 1.3),
                       ),
                     ],
                   ),
@@ -1423,9 +1424,9 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppConstants.surfaceContainerLow,
+        color: colors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppConstants.radiusCard),
-        border: Border.all(color: AppConstants.outlineCard),
+        border: Border.all(color: colors.outlineCard),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1437,7 +1438,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(color: AppConstants.textSecondary, fontSize: 11),
+                  style: TextStyle(color: colors.textSecondary, fontSize: 11),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1451,7 +1452,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
           const SizedBox(height: 2),
           Text(
             description,
-            style: const TextStyle(color: AppConstants.textTertiary, fontSize: 10.5),
+            style: TextStyle(color: colors.textTertiary, fontSize: 10.5),
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -1483,14 +1484,14 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
           return Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppConstants.surfaceContainerLow,
+              color: colors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(AppConstants.radiusCard),
               border: Border.all(
                 color: isMastered
-                    ? AppConstants.success.withValues(alpha: 0.3)
+                    ? colors.success.withValues(alpha: 0.3)
                     : (isWeak
-                        ? AppConstants.warning.withValues(alpha: 0.3)
-                        : AppConstants.outlineCard),
+                        ? colors.warning.withValues(alpha: 0.3)
+                        : colors.outlineCard),
               ),
             ),
             child: Column(
@@ -1507,13 +1508,13 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                             height: 24,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: AppConstants.surfaceContainerHigh,
+                              color: colors.surfaceContainerHigh,
                             ),
                             child: Center(
                               child: Text(
                                 '${index + 1}',
-                                style: const TextStyle(
-                                  color: AppConstants.textPrimary,
+                                style: TextStyle(
+                                  color: colors.textPrimary,
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -1524,8 +1525,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                           Expanded(
                             child: Text(
                               item.conceptName.replaceAll('_', ' '),
-                              style: const TextStyle(
-                                color: AppConstants.textPrimary,
+                              style: TextStyle(
+                                color: colors.textPrimary,
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -1540,12 +1541,12 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: (isMastered
-                                ? AppConstants.success
+                                ? colors.success
                                 : (isWeak
-                                    ? AppConstants.warning
+                                    ? colors.warning
                                     : (isActive
-                                        ? AppConstants.primaryContainer
-                                        : AppConstants.surfaceContainerHigh)))
+                                        ? colors.primaryContainer
+                                        : colors.surfaceContainerHigh)))
                             .withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                       ),
@@ -1557,12 +1558,12 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                                 : (isActive ? 'In corso' : 'In programma')),
                         style: TextStyle(
                           color: isMastered
-                              ? AppConstants.success
+                              ? colors.success
                               : (isWeak
-                                  ? AppConstants.warning
+                                  ? colors.warning
                                   : (isActive
-                                      ? AppConstants.primaryContainer
-                                      : AppConstants.textSecondary)),
+                                      ? colors.primaryContainer
+                                      : colors.textSecondary)),
                           fontSize: 10.5,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1574,8 +1575,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                   const SizedBox(height: 8),
                   Text(
                     'Domanda pianificata: "${item.mainQuestion}"',
-                    style: const TextStyle(
-                      color: AppConstants.textSecondary,
+                    style: TextStyle(
+                      color: colors.textSecondary,
                       fontSize: 12,
                       fontStyle: FontStyle.italic,
                     ),
@@ -1585,8 +1586,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                   const SizedBox(height: 6),
                   Text(
                     'Prerequisiti: ${item.prerequisites.join(", ").replaceAll('_', ' ')}',
-                    style: const TextStyle(
-                      color: AppConstants.textTertiary,
+                    style: TextStyle(
+                      color: colors.textTertiary,
                       fontSize: 11,
                     ),
                   ),
@@ -1602,7 +1603,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
       future: context.read<ExamProvider>().fetchTranscriptForIteration(widget.item.iteration, courseId: widget.item.id),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: AppConstants.primaryContainer));
+          return Center(child: CircularProgressIndicator(color: colors.primaryContainer));
         }
 
         final turns = snapshot.data ?? [];
@@ -1616,21 +1617,21 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
         if (uniqueConcepts.isEmpty) {
           return Center(
             child: Padding(
-              padding: const EdgeInsets.all(32),
+              padding: EdgeInsets.all(32),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.menu_book_outlined, size: 40, color: AppConstants.textSecondary),
+                children: [
+                  Icon(Icons.menu_book_outlined, size: 40, color: colors.textSecondary),
                   SizedBox(height: 12),
                   Text(
                     'Nessun sillabo registrato',
-                    style: TextStyle(color: AppConstants.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
+                    style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                   SizedBox(height: 6),
                   Text(
                     'Questa sessione non ha ancora concetti formalizzati nel programma didattico.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppConstants.textSecondary, fontSize: 12.5),
+                    style: TextStyle(color: colors.textSecondary, fontSize: 12.5),
                   ),
                 ],
               ),
@@ -1652,9 +1653,9 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
             return Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppConstants.surfaceContainerLow,
+                color: colors.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(AppConstants.radiusCard),
-                border: Border.all(color: AppConstants.outlineCard),
+                border: Border.all(color: colors.outlineCard),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1665,8 +1666,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                       Expanded(
                         child: Text(
                           cName,
-                          style: const TextStyle(
-                            color: AppConstants.textPrimary,
+                          style: TextStyle(
+                            color: colors.textPrimary,
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1676,8 +1677,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: (isMastered
-                                  ? AppConstants.success
-                                  : (isWeak ? AppConstants.warning : AppConstants.primaryContainer))
+                                  ? colors.success
+                                  : (isWeak ? colors.warning : colors.primaryContainer))
                               .withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                         ),
@@ -1685,8 +1686,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                           isMastered ? '✓ Appreso' : (isWeak ? '⚠ In revisione' : 'Trattato'),
                           style: TextStyle(
                             color: isMastered
-                                ? AppConstants.success
-                                : (isWeak ? AppConstants.warning : AppConstants.primaryContainer),
+                                ? colors.success
+                                : (isWeak ? colors.warning : colors.primaryContainer),
                             fontSize: 10.5,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1698,8 +1699,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                     const SizedBox(height: 8),
                     Text(
                       'Quesito docente: "${turn.aiQuestion}"',
-                      style: const TextStyle(
-                        color: AppConstants.textSecondary,
+                      style: TextStyle(
+                        color: colors.textSecondary,
                         fontSize: 12,
                         fontStyle: FontStyle.italic,
                       ),
@@ -1722,7 +1723,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
       future: exam.fetchTranscriptForIteration(widget.item.iteration, courseId: widget.item.id),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: AppConstants.primaryContainer));
+          return Center(child: CircularProgressIndicator(color: colors.primaryContainer));
         }
 
         final allTurns = (snapshot.data ?? []).where((t) {
@@ -1738,21 +1739,21 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
         if (allTurns.isEmpty) {
           return Center(
             child: Padding(
-              padding: const EdgeInsets.all(32),
+              padding: EdgeInsets.all(32),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.chat_bubble_outline_rounded, size: 40, color: AppConstants.textSecondary),
+                children: [
+                  Icon(Icons.chat_bubble_outline_rounded, size: 40, color: colors.textSecondary),
                   SizedBox(height: 12),
                   Text(
                     'Nessuno scambio registrato',
-                    style: TextStyle(color: AppConstants.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
+                    style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                   SizedBox(height: 6),
                   Text(
                     'La discussione non contiene ancora interventi audio registrati.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppConstants.textSecondary, fontSize: 12.5),
+                    style: TextStyle(color: colors.textSecondary, fontSize: 12.5),
                   ),
                 ],
               ),
@@ -1800,8 +1801,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                     icon: const Icon(Icons.copy_rounded, size: 14),
                     label: const Text('Esporta Note', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppConstants.primary,
-                      side: const BorderSide(color: AppConstants.outlineCard),
+                      foregroundColor: colors.primary,
+                      side: BorderSide(color: colors.outlineCard),
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppConstants.radiusPill),
@@ -1815,10 +1816,10 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
             // Transcript Turns List
             Expanded(
               child: filteredTurns.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'Nessuno scambio per il filtro selezionato.',
-                        style: TextStyle(color: AppConstants.textSecondary, fontSize: 13),
+                        style: TextStyle(color: colors.textSecondary, fontSize: 13),
                       ),
                     )
                   : ListView.builder(
@@ -1842,16 +1843,16 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSel ? AppConstants.primaryContainer : AppConstants.surfaceContainerLow,
+          color: isSel ? colors.primaryContainer : colors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
           border: Border.all(
-            color: isSel ? AppConstants.primaryContainer : AppConstants.outlineCard,
+            color: isSel ? colors.primaryContainer : colors.outlineCard,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSel ? AppConstants.onPrimaryContainer : AppConstants.textSecondary,
+            color: isSel ? colors.onPrimaryContainer : colors.textSecondary,
             fontSize: 11,
             fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
           ),

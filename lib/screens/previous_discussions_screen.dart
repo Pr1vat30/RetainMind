@@ -5,8 +5,8 @@ import '../models/session_models.dart';
 import '../providers/exam_provider.dart';
 import '../widgets/new_discussion_modal.dart';
 import '../widgets/transcript_bubble.dart';
+import '../widgets/exam_launch_loader.dart';
 import 'discussion_detail_screen.dart';
-import 'exam_screen.dart';
 
 class PreviousDiscussionsScreen extends StatefulWidget {
   final bool showBackButton;
@@ -23,10 +23,11 @@ class PreviousDiscussionsScreen extends StatefulWidget {
     VoidCallback? onResume,
   }) {
     final exam = context.read<ExamProvider>();
+    final colors = context.colors;
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppConstants.surfaceContainerHigh,
+      backgroundColor: colors.surfaceContainerHigh,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppConstants.radiusCard)),
@@ -48,7 +49,7 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: AppConstants.surfaceContainerHighest,
+                        color: colors.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -65,8 +66,8 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                           children: [
                             Text(
                               item.title,
-                              style: const TextStyle(
-                                color: AppConstants.textPrimary,
+                              style: TextStyle(
+                                color: colors.textPrimary,
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: -0.3,
@@ -79,8 +80,8 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                                 item.timestamp.contains('T')
                                     ? item.timestamp.split('T').first
                                     : item.timestamp,
-                                style: const TextStyle(
-                                  color: AppConstants.textSecondary,
+                                style: TextStyle(
+                                  color: colors.textSecondary,
                                   fontSize: 12,
                                 ),
                               ),
@@ -89,7 +90,7 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: AppConstants.textSecondary, size: 20),
+                        icon: Icon(Icons.close, color: colors.textSecondary, size: 20),
                         onPressed: () => Navigator.pop(ctx),
                       ),
                     ],
@@ -106,19 +107,19 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: AppConstants.surfaceContainerLow,
+                          color: colors.surfaceContainerLow,
                           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                          border: Border.all(color: AppConstants.outlineCard),
+                          border: Border.all(color: colors.outlineCard),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.chat_bubble_outline, size: 13, color: AppConstants.primaryContainer),
+                            Icon(Icons.chat_bubble_outline, size: 13, color: colors.primaryContainer),
                             const SizedBox(width: 6),
                             Text(
                               '${item.turnsCompleted} Scambi',
-                              style: const TextStyle(
-                                color: AppConstants.textPrimary,
+                              style: TextStyle(
+                                color: colors.textPrimary,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -130,7 +131,7 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: (item.averageMastery! >= 0.70 ? AppConstants.success : AppConstants.warning)
+                            color: (item.averageMastery! >= 0.70 ? colors.success : colors.warning)
                                 .withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                           ),
@@ -140,13 +141,13 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                               Icon(
                                 item.averageMastery! >= 0.70 ? Icons.check_circle_outline : Icons.speed,
                                 size: 13,
-                                color: item.averageMastery! >= 0.70 ? AppConstants.success : AppConstants.warning,
+                                color: item.averageMastery! >= 0.70 ? colors.success : colors.warning,
                               ),
                               const SizedBox(width: 6),
                               Text(
                                 'Padronanza ${(item.averageMastery! * 100).toInt()}%',
                                 style: TextStyle(
-                                  color: item.averageMastery! >= 0.70 ? AppConstants.success : AppConstants.warning,
+                                  color: item.averageMastery! >= 0.70 ? colors.success : colors.warning,
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -159,8 +160,8 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                           final isItemCompleted = item.status == 'COMPLETED';
                           final isItemInPausa = item.status == 'PAUSED' || (item.isCurrent && exam.sessionStatus?.status == 'PAUSED');
                           final itemColor = isItemCompleted
-                              ? AppConstants.success
-                              : (isItemInPausa ? AppConstants.warning : AppConstants.primaryContainer);
+                              ? colors.success
+                              : (isItemInPausa ? colors.warning : colors.primaryContainer);
                           final itemLabel = isItemCompleted
                               ? 'Completata'
                               : (isItemInPausa ? 'In Pausa' : 'In Corso');
@@ -195,13 +196,13 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                         return Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppConstants.success.withValues(alpha: 0.12),
+                            color: colors.success.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                            border: Border.all(color: AppConstants.success.withValues(alpha: 0.3)),
+                            border: Border.all(color: colors.success.withValues(alpha: 0.3)),
                           ),
                           child: Text(
                             '✓ ${c.replaceAll('_', ' ')}',
-                            style: const TextStyle(color: AppConstants.success, fontSize: 11.5, fontWeight: FontWeight.w600),
+                            style: TextStyle(color: colors.success, fontSize: 11.5, fontWeight: FontWeight.w600),
                           ),
                         );
                       }).toList(),
@@ -217,13 +218,13 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                         return Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppConstants.warning.withValues(alpha: 0.12),
+                            color: colors.warning.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                            border: Border.all(color: AppConstants.warning.withValues(alpha: 0.3)),
+                            border: Border.all(color: colors.warning.withValues(alpha: 0.3)),
                           ),
                           child: Text(
                             '⚠ ${c.replaceAll('_', ' ')}',
-                            style: const TextStyle(color: AppConstants.warning, fontSize: 11.5, fontWeight: FontWeight.w600),
+                            style: TextStyle(color: colors.warning, fontSize: 11.5, fontWeight: FontWeight.w600),
                           ),
                         );
                       }).toList(),
@@ -231,13 +232,13 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                   ],
 
                   const SizedBox(height: 16),
-                  const Divider(color: AppConstants.outline),
+                  Divider(color: colors.outline),
                   const SizedBox(height: 8),
 
-                  const Text(
+                  Text(
                     'Trascrizione Scambi',
                     style: TextStyle(
-                      color: AppConstants.textPrimary,
+                      color: colors.textPrimary,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
@@ -250,17 +251,17 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                       future: exam.fetchTranscriptForIteration(item.iteration, courseId: item.id),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppConstants.primaryContainer),
+                          return Center(
+                            child: CircularProgressIndicator(strokeWidth: 2, color: colors.primaryContainer),
                           );
                         }
 
                         final turns = snapshot.data ?? [];
                         if (turns.isEmpty) {
-                          return const Center(
+                          return Center(
                             child: Text(
                               'Nessuno scambio registrato per questa sessione.',
-                              style: TextStyle(color: AppConstants.textSecondary, fontSize: 13),
+                              style: TextStyle(color: colors.textSecondary, fontSize: 13),
                             ),
                           );
                         }
@@ -286,14 +287,12 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                         if (onResume != null) {
                           onResume();
                         } else {
-                          exam.resumeExamAndConnect(courseId: item.id).then((_) {
-                            if (context.mounted) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const ExamScreen()),
-                              );
-                            }
-                          });
+                          launchExamWithLoader(
+                            context,
+                            title: 'Ripresa Sessione...',
+                            subtitle: 'Connessione con il docente AI in corso...',
+                            onConnect: () => exam.resumeExamAndConnect(courseId: item.id),
+                          );
                         }
                       },
                       icon: const Icon(Icons.play_arrow_rounded, size: 22),
@@ -308,8 +307,8 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppConstants.primaryContainer,
-                        foregroundColor: AppConstants.onPrimary,
+                        backgroundColor: colors.primaryContainer,
+                        foregroundColor: colors.onPrimary,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
@@ -345,23 +344,24 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
   }
 
   Future<void> _confirmClearAllHistory() async {
+    final colors = context.colors;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppConstants.surfaceContainerHigh,
+        backgroundColor: colors.surfaceContainerHigh,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppConstants.radiusCard),
-          side: const BorderSide(color: AppConstants.outlineCard),
+          side: BorderSide(color: colors.outlineCard),
         ),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: AppConstants.error, size: 24),
+            Icon(Icons.warning_amber_rounded, color: colors.error, size: 24),
             SizedBox(width: 10),
             Expanded(
               child: Text(
                 'Cancella cronologia',
                 style: TextStyle(
-                  color: AppConstants.textPrimary,
+                  color: colors.textPrimary,
                   fontSize: 17,
                   fontWeight: FontWeight.bold,
                 ),
@@ -369,19 +369,19 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
             ),
           ],
         ),
-        content: const Text(
+        content: Text(
           'Sei sicuro di voler cancellare tutte le discussioni registrate? Tutti i dati di studio, le sessioni e le trascrizioni verranno rimossi.',
-          style: TextStyle(color: AppConstants.textSecondary, fontSize: 13.5, height: 1.4),
+          style: TextStyle(color: colors.textSecondary, fontSize: 13.5, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annulla', style: TextStyle(color: AppConstants.textSecondary)),
+            child: Text('Annulla', style: TextStyle(color: colors.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppConstants.error,
+              backgroundColor: colors.error,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppConstants.radiusPill),
@@ -406,7 +406,7 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Tutte le discussioni sono state cancellate dal server.'),
-        backgroundColor: AppConstants.surfaceContainerHighest,
+        backgroundColor: colors.surfaceContainerHighest,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusSm)),
       ),
@@ -414,23 +414,24 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
   }
 
   Future<void> _confirmDeleteDiscussion(dynamic identifier, {String? title}) async {
+    final colors = context.colors;
     final displayTitle = title ?? '#$identifier';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppConstants.surfaceContainerHigh,
+        backgroundColor: colors.surfaceContainerHigh,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppConstants.radiusCard),
-          side: const BorderSide(color: AppConstants.outlineCard),
+          side: BorderSide(color: colors.outlineCard),
         ),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.delete_outline_rounded, color: AppConstants.error, size: 22),
+            Icon(Icons.delete_outline_rounded, color: colors.error, size: 22),
             SizedBox(width: 8),
             Text(
               'Elimina discussione',
               style: TextStyle(
-                color: AppConstants.textPrimary,
+                color: colors.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -439,17 +440,17 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
         ),
         content: Text(
           'Sei sicuro di voler eliminare la discussione "$displayTitle"? Verrà rimossa definitivamente dal server.',
-          style: const TextStyle(color: AppConstants.textSecondary, fontSize: 13, height: 1.4),
+          style: TextStyle(color: colors.textSecondary, fontSize: 13, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annulla', style: TextStyle(color: AppConstants.textSecondary)),
+            child: Text('Annulla', style: TextStyle(color: colors.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppConstants.error,
+              backgroundColor: colors.error,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppConstants.radiusPill),
@@ -471,7 +472,7 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Discussione "$displayTitle" eliminata dal server.'),
-        backgroundColor: AppConstants.surfaceContainerHighest,
+        backgroundColor: colors.surfaceContainerHighest,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusSm)),
       ),
@@ -482,6 +483,7 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
   Widget build(BuildContext context) {
     final exam = context.watch<ExamProvider>();
     final history = exam.historyItems;
+    final colors = context.colors;
     final isPaused = exam.sessionStatus?.status == 'PAUSED';
 
     // Apply filtering
@@ -504,21 +506,21 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: AppConstants.background,
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: AppConstants.background,
+        backgroundColor: colors.background,
         elevation: 0,
         automaticallyImplyLeading: widget.showBackButton,
         leading: widget.showBackButton
             ? IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: AppConstants.textPrimary),
+                icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: colors.textPrimary),
                 onPressed: () => Navigator.pop(context),
               )
             : null,
-        title: const Text(
+        title: Text(
           'Cronologia Discussioni',
           style: TextStyle(
-            color: AppConstants.textPrimary,
+            color: colors.textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.bold,
             letterSpacing: -0.3,
@@ -526,12 +528,12 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_sweep_rounded, color: AppConstants.error, size: 22),
+            icon: Icon(Icons.delete_sweep_rounded, color: colors.error, size: 22),
             tooltip: 'Cancella tutte le discussioni',
             onPressed: _confirmClearAllHistory,
           ),
           IconButton(
-            icon: const Icon(Icons.add_circle_outline, color: AppConstants.primary, size: 22),
+            icon: Icon(Icons.add_circle_outline, color: colors.primary, size: 22),
             tooltip: 'Nuova discussione',
             onPressed: () => NewDiscussionModal.show(context),
           ),
@@ -540,8 +542,8 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () => exam.fetchHistory(),
-          color: AppConstants.primaryContainer,
-          backgroundColor: AppConstants.surfaceContainerHigh,
+          color: colors.primaryContainer,
+          backgroundColor: colors.surfaceContainerHigh,
           child: Column(
             children: [
               // Search & Filter Header
@@ -552,32 +554,32 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                     // Search Bar
                     TextField(
                       onChanged: (val) => setState(() => _searchQuery = val.trim()),
-                      style: const TextStyle(color: AppConstants.textPrimary, fontSize: 13),
+                      style: TextStyle(color: colors.textPrimary, fontSize: 13),
                       decoration: InputDecoration(
                         hintText: 'Cerca per titolo, argomento o iterazione...',
-                        hintStyle: const TextStyle(color: AppConstants.textSecondary, fontSize: 12.5),
-                        prefixIcon: const Icon(Icons.search, size: 20, color: AppConstants.textSecondary),
+                        hintStyle: TextStyle(color: colors.textSecondary, fontSize: 12.5),
+                        prefixIcon: Icon(Icons.search, size: 20, color: colors.textSecondary),
                         suffixIcon: _searchQuery.isNotEmpty
                             ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18, color: AppConstants.textSecondary),
+                                icon: Icon(Icons.clear, size: 18, color: colors.textSecondary),
                                 onPressed: () => setState(() => _searchQuery = ''),
                               )
                             : null,
                         filled: true,
-                        fillColor: AppConstants.surfaceContainerLow,
+                        fillColor: colors.surfaceContainerLow,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                          borderSide: const BorderSide(color: AppConstants.outlineCard),
+                          borderSide: BorderSide(color: colors.outlineCard),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                          borderSide: const BorderSide(color: AppConstants.outlineCard),
+                          borderSide: BorderSide(color: colors.outlineCard),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                          borderSide: const BorderSide(color: AppConstants.primaryContainer),
+                          borderSide: BorderSide(color: colors.primaryContainer),
                         ),
                       ),
                     ),
@@ -597,16 +599,16 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                               decoration: BoxDecoration(
-                                color: isSel ? AppConstants.primaryContainer : AppConstants.surfaceContainerLow,
+                                color: isSel ? colors.primaryContainer : colors.surfaceContainerLow,
                                 borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                                 border: Border.all(
-                                  color: isSel ? AppConstants.primaryContainer : AppConstants.outlineCard,
+                                  color: isSel ? colors.primaryContainer : colors.outlineCard,
                                 ),
                               ),
                               child: Text(
                                 _filters[idx],
                                 style: TextStyle(
-                                  color: isSel ? AppConstants.onPrimaryContainer : AppConstants.textSecondary,
+                                  color: isSel ? colors.onPrimaryContainer : colors.textSecondary,
                                   fontSize: 12,
                                   fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
                                 ),
@@ -637,8 +639,8 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                 height: 72,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: AppConstants.surfaceContainerHigh,
-                                  border: Border.all(color: AppConstants.outlineCard),
+                                  color: colors.surfaceContainerHigh,
+                                  border: Border.all(color: colors.outlineCard),
                                 ),
                                 child: Icon(
                                   _searchQuery.isNotEmpty
@@ -646,8 +648,8 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                       : Icons.upload_file_rounded,
                                   size: 34,
                                   color: _searchQuery.isNotEmpty
-                                      ? AppConstants.textSecondary
-                                      : AppConstants.primary,
+                                      ? colors.textSecondary
+                                      : colors.primary,
                                 ),
                               ),
                               const SizedBox(height: 18),
@@ -655,8 +657,8 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                 _searchQuery.isNotEmpty
                                     ? 'Nessuna discussione trovata'
                                     : 'Inizia la tua Prima Discussione',
-                                style: const TextStyle(
-                                  color: AppConstants.textPrimary,
+                                style: TextStyle(
+                                  color: colors.textPrimary,
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -667,8 +669,8 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                     ? 'Nessun risultato corrisponde alla ricerca "$_searchQuery".'
                                     : 'Non hai ancora registrato sessioni di studio precedenti.\nCarica il tuo primo file PDF o appunti per iniziare l\'interrogazione vocale.',
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: AppConstants.textSecondary,
+                                style: TextStyle(
+                                  color: colors.textSecondary,
                                   fontSize: 13,
                                   height: 1.4,
                                 ),
@@ -680,8 +682,8 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                   icon: const Icon(Icons.clear_rounded, size: 18),
                                   label: const Text('Reimposta ricerca'),
                                   style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppConstants.textPrimary,
-                                    side: const BorderSide(color: AppConstants.outlineCard),
+                                    foregroundColor: colors.textPrimary,
+                                    side: BorderSide(color: colors.outlineCard),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                                     ),
@@ -696,8 +698,8 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                   icon: const Icon(Icons.upload_file_rounded, size: 18),
                                   label: const Text('Carica File & Inizia'),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppConstants.primaryContainer,
-                                    foregroundColor: AppConstants.onPrimary,
+                                    backgroundColor: colors.primaryContainer,
+                                    foregroundColor: colors.onPrimary,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                                     ),
@@ -719,12 +721,12 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
 
                           return Container(
                             decoration: BoxDecoration(
-                              color: AppConstants.surfaceContainerLow,
+                              color: colors.surfaceContainerLow,
                               borderRadius: BorderRadius.circular(AppConstants.radiusCard),
                               border: Border.all(
                                 color: isCur
-                                    ? AppConstants.primaryContainer.withValues(alpha: 0.5)
-                                    : AppConstants.outlineCard,
+                                    ? colors.primaryContainer.withValues(alpha: 0.5)
+                                    : colors.outlineCard,
                                 width: isCur ? 1.5 : 1,
                               ),
                             ),
@@ -756,20 +758,20 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                               decoration: BoxDecoration(
-                                                color: AppConstants.surfaceContainerHigh,
+                                                color: colors.surfaceContainerHigh,
                                                 borderRadius: BorderRadius.circular(AppConstants.radiusSm),
                                               ),
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  const Icon(Icons.description_outlined, size: 12, color: AppConstants.primary),
+                                                  Icon(Icons.description_outlined, size: 12, color: colors.primary),
                                                   const SizedBox(width: 4),
                                                   ConstrainedBox(
                                                     constraints: const BoxConstraints(maxWidth: 160),
                                                     child: Text(
                                                       item.filename.isNotEmpty ? item.filename : 'Documento #${item.iteration}',
-                                                      style: const TextStyle(
-                                                        color: AppConstants.primary,
+                                                      style: TextStyle(
+                                                        color: colors.primary,
                                                         fontSize: 11,
                                                         fontWeight: FontWeight.w700,
                                                       ),
@@ -784,8 +786,8 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                                 final isItemCompleted = item.status == 'COMPLETED';
                                                 final isItemInPausa = item.status == 'PAUSED' || (isCur && isItemPaused);
                                                 final itemBadgeColor = isItemCompleted
-                                                    ? AppConstants.success
-                                                    : (isItemInPausa ? AppConstants.warning : AppConstants.primaryContainer);
+                                                    ? colors.success
+                                                    : (isItemInPausa ? colors.warning : colors.primaryContainer);
                                                 final itemBadgeLabel = isItemCompleted
                                                     ? 'Completata'
                                                     : (isItemInPausa ? 'In Pausa' : (isCur ? 'In Corso (Attiva)' : 'In Corso'));
@@ -818,19 +820,19 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                                 item.timestamp.contains('T')
                                                     ? item.timestamp.split('T').first
                                                     : item.timestamp,
-                                                style: const TextStyle(
-                                                  color: AppConstants.textTertiary,
+                                                style: TextStyle(
+                                                  color: colors.textTertiary,
                                                   fontSize: 11.5,
                                                 ),
                                               ),
                                             GestureDetector(
                                               onTap: () => _confirmDeleteDiscussion(item.id.isNotEmpty ? item.id : item.iteration, title: item.title),
-                                              child: const Padding(
+                                              child: Padding(
                                                 padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                                 child: Icon(
                                                   Icons.delete_outline_rounded,
                                                   size: 18,
-                                                  color: AppConstants.textTertiary,
+                                                  color: colors.textTertiary,
                                                 ),
                                               ),
                                             ),
@@ -844,8 +846,8 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                     // Title
                                     Text(
                                       item.title,
-                                      style: const TextStyle(
-                                        color: AppConstants.textPrimary,
+                                      style: TextStyle(
+                                        color: colors.textPrimary,
                                         fontSize: 15,
                                         fontWeight: FontWeight.w700,
                                         letterSpacing: -0.2,
@@ -866,13 +868,13 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                             Icon(
                                               Icons.chat_bubble_outline_rounded,
                                               size: 14,
-                                              color: AppConstants.textSecondary,
+                                              color: colors.textSecondary,
                                             ),
                                             const SizedBox(width: 5),
                                             Text(
                                               '${item.turnsCompleted} scambi',
-                                              style: const TextStyle(
-                                                color: AppConstants.textSecondary,
+                                              style: TextStyle(
+                                                color: colors.textSecondary,
                                                 fontSize: 12,
                                               ),
                                             ),
@@ -888,16 +890,16 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                                     : Icons.speed_rounded,
                                                 size: 14,
                                                 color: item.averageMastery! >= 0.70
-                                                    ? AppConstants.success
-                                                    : AppConstants.warning,
+                                                    ? colors.success
+                                                    : colors.warning,
                                               ),
                                               const SizedBox(width: 5),
                                               Text(
                                                 '${(item.averageMastery! * 100).toInt()}% assimilato',
                                                 style: TextStyle(
                                                   color: item.averageMastery! >= 0.70
-                                                      ? AppConstants.success
-                                                      : AppConstants.warning,
+                                                      ? colors.success
+                                                      : colors.warning,
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w600,
                                                 ),
@@ -917,14 +919,14 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                           return Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                             decoration: BoxDecoration(
-                                              color: AppConstants.warning.withValues(alpha: 0.10),
+                                              color: colors.warning.withValues(alpha: 0.10),
                                               borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                                              border: Border.all(color: AppConstants.warning.withValues(alpha: 0.25)),
+                                              border: Border.all(color: colors.warning.withValues(alpha: 0.25)),
                                             ),
                                             child: Text(
                                               '⚠ ${c.replaceAll('_', ' ')}',
-                                              style: const TextStyle(
-                                                color: AppConstants.warning,
+                                              style: TextStyle(
+                                                color: colors.warning,
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w500,
                                               ),
@@ -950,10 +952,10 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                               MaterialPageRoute(builder: (_) => DiscussionDetailScreen(item: item)),
                                             );
                                           },
-                                          icon: const Icon(Icons.menu_book_rounded, size: 15, color: AppConstants.primary),
-                                          label: const Text(
+                                          icon: Icon(Icons.menu_book_rounded, size: 15, color: colors.primary),
+                                          label: Text(
                                             'Sillabo & Trascrizione',
-                                            style: TextStyle(color: AppConstants.primary, fontSize: 12, fontWeight: FontWeight.bold),
+                                            style: TextStyle(color: colors.primary, fontSize: 12, fontWeight: FontWeight.bold),
                                           ),
                                           style: TextButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -966,20 +968,19 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                             final isItemCompleted = item.status == 'COMPLETED';
                                             if (!isItemCompleted) {
                                               return ElevatedButton.icon(
-                                                onPressed: () async {
-                                                  final nav = Navigator.of(context);
-                                                  await context.read<ExamProvider>().resumeExamAndConnect(courseId: item.id);
-                                                  if (mounted) {
-                                                    nav.push(
-                                                      MaterialPageRoute(builder: (_) => const ExamScreen()),
-                                                    );
-                                                  }
+                                                onPressed: () {
+                                                  launchExamWithLoader(
+                                                    context,
+                                                    title: 'Ripresa Sessione...',
+                                                    subtitle: 'Connessione con il docente AI in corso...',
+                                                    onConnect: () => context.read<ExamProvider>().resumeExamAndConnect(courseId: item.id),
+                                                  );
                                                 },
                                                 icon: const Icon(Icons.play_arrow_rounded, size: 16),
                                                 label: const Text('Riprendi'),
                                                 style: ElevatedButton.styleFrom(
-                                                  backgroundColor: AppConstants.primaryContainer,
-                                                  foregroundColor: AppConstants.onPrimary,
+                                                  backgroundColor: colors.primaryContainer,
+                                                  foregroundColor: colors.onPrimary,
                                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                                                   minimumSize: Size.zero,
                                                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -990,22 +991,21 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                               );
                                             } else {
                                               return OutlinedButton.icon(
-                                                onPressed: () async {
-                                                  final nav = Navigator.of(context);
-                                                  await context.read<ExamProvider>().startNewExam(adapt: true, courseId: item.id);
-                                                  if (mounted) {
-                                                    nav.push(
-                                                      MaterialPageRoute(builder: (_) => const ExamScreen()),
-                                                    );
-                                                  }
+                                                onPressed: () {
+                                                  launchExamWithLoader(
+                                                    context,
+                                                    title: 'Nuova Simulazione...',
+                                                    subtitle: 'Preparazione esame con adattamento...',
+                                                    onConnect: () => context.read<ExamProvider>().startNewExam(adapt: true, courseId: item.id),
+                                                  );
                                                 },
-                                                icon: const Icon(Icons.replay_rounded, size: 15, color: AppConstants.secondary),
-                                                label: const Text(
+                                                icon: Icon(Icons.replay_rounded, size: 15, color: colors.secondary),
+                                                label: Text(
                                                   'Ripeti con adattamento',
-                                                  style: TextStyle(color: AppConstants.secondary, fontSize: 12),
+                                                  style: TextStyle(color: colors.secondary, fontSize: 12),
                                                 ),
                                                 style: OutlinedButton.styleFrom(
-                                                  side: const BorderSide(color: AppConstants.secondaryContainer),
+                                                  side: BorderSide(color: colors.secondaryContainer),
                                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                                   minimumSize: Size.zero,
                                                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:retain_mind_def/constants.dart';
-import 'package:retain_mind_def/main.dart';
+import 'package:retain_mind/constants.dart';
+import 'package:retain_mind/main.dart';
 
 void main() {
   testWidgets('RetainMind app smoke test', (WidgetTester tester) async {

@@ -80,10 +80,11 @@ class CourseManager:
             return first_id
 
         # Fallback: if root examination_plan exists, migrate it to course
-        if cls.ROOT_PLAN_FILE.exists():
+        candidate_plan_file = cls.ROOT_PLAN_FILE if cls.ROOT_PLAN_FILE.exists() else Path("examination_plan.json")
+        if candidate_plan_file.exists():
             default_id = "corso_attuale"
             try:
-                plan_data = json.loads(cls.ROOT_PLAN_FILE.read_text(encoding="utf-8"))
+                plan_data = json.loads(candidate_plan_file.read_text(encoding="utf-8"))
                 title = plan_data.get("title", "Esame Orale")
                 default_id = cls.slugify(title)
             except Exception:
@@ -91,8 +92,8 @@ class CourseManager:
             cls.create_or_update_course(
                 course_id=default_id,
                 title=title,
-                filename="examination_plan.json",
-                file_path=str(cls.ROOT_PLAN_FILE),
+                filename=candidate_plan_file.name,
+                file_path=str(candidate_plan_file),
                 plan_dict=plan_data if "plan_data" in locals() else None,
             )
             return default_id
@@ -209,7 +210,24 @@ class CourseManager:
     ) -> None:
         """Synchronizes SessionAssessmentManager state to course folder and metadata."""
         try:
-            cid = cls.get_active_course_id()
+            cid = None
+            if getattr(manager, "course_id", None):
+                cid = manager.course_id
+            elif getattr(manager, "state_file_path", None):
+                p = Path(manager.state_file_path)
+                if p.parent.parent.name == "courses":
+                    cid = p.parent.name
+            if not cid and getattr(manager, "examination_plan", None):
+                plan = manager.examination_plan
+                if getattr(plan, "document_id", None) and plan.document_id not in ("doc_default", "greedy", "examination_plan"):
+                    cid = cls.slugify(plan.document_id)
+                elif getattr(plan, "title", None) and plan.title != "esame orale":
+                    cid = cls.slugify(plan.title)
+            if not cid:
+                cid = cls.get_active_course_id()
+            if not cid:
+                return
+
             cdir = cls.COURSES_DIR / cid
             cdir.mkdir(parents=True, exist_ok=True)
             sessions_dir = cdir / "sessions"

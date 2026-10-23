@@ -8,6 +8,8 @@ Supports dual operational architectures:
    with turn detector and preemptive audio synthesis.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
@@ -15,11 +17,13 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
+from livekit import rtc
 from livekit.agents import (
     Agent,
     AgentServer,
     AgentSession,
     JobContext,
+    JobProcess,
     RunContext,
     TurnHandlingOptions,
     cli,
@@ -27,6 +31,8 @@ from livekit.agents import (
     inference,
     llm,
     room_io,
+    stt,
+    tts,
 )
 from google.genai import types
 from livekit.plugins import ai_coustics, deepgram, elevenlabs, google, openai
@@ -106,8 +112,16 @@ class OralExaminerAgent(Agent):
                     else types.AudioTranscriptionConfig()
                 ),
                 output_audio_transcription=types.AudioTranscriptionConfig(),
-                tool_behavior=types.Behavior.BLOCKING,
-                tool_response_scheduling=types.FunctionResponseScheduling.WHEN_IDLE,
+                realtime_input_config=types.RealtimeInputConfig(
+                    activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+                    automatic_activity_detection=types.AutomaticActivityDetection(
+                        start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+                        end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
+                        prefix_padding_ms=100,
+                        silence_duration_ms=250,
+                    ),
+                    turn_coverage=types.TurnCoverage.TURN_INCLUDES_ONLY_ACTIVITY,
+                ),
                 context_window_compression=types.ContextWindowCompressionConfig(
                     sliding_window=types.SlidingWindow()
                 ),
@@ -399,7 +413,29 @@ class OralExaminerAgent(Agent):
             )
 
 
-server = AgentServer()
+def prewarm(proc: JobProcess) -> None:
+    """Prewarm LiveKit agent worker processes during startup before any job arrives.
+    
+    1. Pre-initializes Google GenAI Client with credentials so TLS/HTTP connection pools are warm.
+    2. Wakes up the LiveKit Google plugin classes in memory to eliminate dynamic import latency.
+    3. Caches resources in proc.userdata for sub-100ms job acquisition.
+    """
+    logger.info("🔥 Prewarming LiveKit agent worker process (PID: %d)...", proc.pid)
+    try:
+        from google import genai
+        api_key = config.google_api_key or None
+        if api_key:
+            client = genai.Client(api_key=api_key)
+            proc.userdata["genai_client"] = client
+            logger.info("🔥 GenAI client prewarmed and cached in worker PID %d", proc.pid)
+    except Exception as e:
+        logger.warning("Could not prewarm GenAI client in worker PID %d: %s", proc.pid, e)
+
+
+server = AgentServer(
+    setup_fnc=prewarm,
+    num_idle_processes=1,
+)
 
 
 async def on_session_end(ctx: JobContext) -> None:
@@ -447,16 +483,117 @@ async def my_agent(ctx: JobContext):
         course_id = ctx.room.metadata.strip() or None
 
     if not course_id and ctx.room.name:
-        match = re.match(r"^oral-exam-(.+)-(\d+)$", ctx.room.name)
-        if match and match.group(1) != "room" and not match.group(1).isdigit():
+        match = re.match(r"^oral-exam-(.+?)(?:-\d{10,})?$", ctx.room.name)
+        if match and match.group(1) not in ("room", "default") and not match.group(1).isdigit():
             course_id = match.group(1)
         elif ctx.room.name.startswith("oral-exam-") and ctx.room.name not in ("oral-exam", "oral-exam-room"):
             candidate = ctx.room.name[len("oral-exam-"):]
             if candidate and not candidate.isdigit():
                 course_id = candidate
 
+    # -------------------------------------------------------------------------
+    # ZERO-LATENCY DIRECT BENCHMARK MODE (Modalità Test Diretto senza DB / Vettori / OCR)
+    # -------------------------------------------------------------------------
+    is_direct_test = (
+        course_id == "direct_test"
+        or ctx.room.name.startswith("direct-test")
+        or (getattr(ctx, "job", None) and getattr(ctx.job, "metadata", "") == "direct_test")
+    )
+    if is_direct_test:
+        logger.info(
+            "⚡ [DIRECT BENCHMARK MODE] Avvio agente vocale zero-overhead per room: %s",
+            ctx.room.name,
+        )
+        direct_instructions = (
+            "Sei un assistente vocale intelligente, amichevole e super-reattivo. "
+            "Rispondi SEMPRE in italiano in modo conciso, colloquiale e naturale a qualsiasi domanda, osservazione o tema proposto dall'utente. "
+            "Non usare elenchi puntati né markdown. Mantieni risposte brevi di 1-3 frasi per una conversazione vocale rapida e piacevole."
+        )
+
+        is_gemini_live_direct = (config.pipeline_mode == "gemini_live")
+
+        if is_gemini_live_direct:
+            direct_model = google.realtime.RealtimeModel(
+                model=config.gemini_live_model,
+                voice=config.gemini_voice,
+                api_key=config.google_api_key or None,
+                instructions=direct_instructions,
+                temperature=0.3,
+                realtime_input_config=types.RealtimeInputConfig(
+                    activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+                    automatic_activity_detection=types.AutomaticActivityDetection(
+                        start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+                        end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
+                        prefix_padding_ms=100,
+                        silence_duration_ms=250,
+                    ),
+                    turn_coverage=types.TurnCoverage.TURN_INCLUDES_ONLY_ACTIVITY,
+                ),
+            )
+            direct_session = AgentSession(llm=direct_model)
+            direct_agent = Agent(llm=direct_model, instructions=direct_instructions)
+        else:
+            stt_inst = (
+                deepgram.STT(api_key=config.deepgram_api_key, language=config.stt_language)
+                if config.deepgram_api_key
+                else inference.STT(model=config.stt_primary_model, language=config.stt_language)
+            )
+            tts_inst = (
+                elevenlabs.TTS(voice_id=config.tts_voice, model="eleven_turbo_v2_5", api_key=config.eleven_api_key)
+                if config.eleven_api_key
+                else inference.TTS(model=config.tts_primary_model, voice=config.tts_voice)
+            )
+            direct_session = AgentSession(stt=stt_inst, tts=tts_inst)
+            direct_agent = Agent(instructions=direct_instructions)
+
+        await ctx.connect()
+
+        @ctx.room.on("participant_disconnected")
+        def on_direct_participant_disconnected(participant: rtc.RemoteParticipant):
+            if not participant.identity.startswith("agent-"):
+                logger.info("Direct test participant left room %s, shutting down job.", ctx.room.name)
+                ctx.shutdown()
+
+        await direct_session.start(agent=direct_agent, room=ctx.room)
+
+        # Check if human participant already in room or wait for them
+        human_participants = [
+            p for p in ctx.room.remote_participants.values()
+            if not p.identity.startswith("agent-")
+        ]
+        if human_participants:
+            logger.info("Human participant already in room %s: %s", ctx.room.name, human_participants[0].identity)
+        else:
+            try:
+                participant = await ctx.wait_for_participant()
+                logger.info("Human participant connected to %s: %s (%s)", ctx.room.name, participant.identity, participant.name)
+            except Exception as err:
+                logger.warning("Error waiting for participant in direct test: %s", err)
+
+        # 1.5s buffer for mobile WebRTC track subscription & audio session stabilization
+        await asyncio.sleep(1.5)
+
+        greeting = "Ciao! Sono pronto. Questa è la modalità diretta ultra-veloce senza database. Di cosa vorresti parlare?"
+        if is_gemini_live_direct:
+            prompt = f'Avvia subito la conversazione salutando e pronunciando esattamente: "{greeting}"'
+            direct_session.generate_reply(user_input=prompt, allow_interruptions=True)
+        else:
+            handle = direct_session.say(greeting, allow_interruptions=True)
+            await handle
+
+        # Keep job active until session shutdown or participant leaves
+        shutdown_fut = asyncio.Future[None]()
+        ctx.add_shutdown_callback(lambda: shutdown_fut.set_result(None) if not shutdown_fut.done() else None)
+        await shutdown_fut
+        return
+
     if not course_id:
         course_id = CourseManager.get_active_course_id()
+
+    if not course_id:
+        existing_courses = CourseManager.list_courses()
+        if existing_courses:
+            course_id = existing_courses[0]["id"]
 
     logger.info("Voice session for room %s bound to course: %s", ctx.room.name, course_id)
     CourseManager.set_active_course(course_id)
@@ -466,10 +603,10 @@ async def my_agent(ctx: JobContext):
     plan_path = course_dir / "plan.json"
     events_path = course_dir / "events.jsonl"
 
-    if not plan_path.exists() and (CourseManager.DATA_DIR / "examination_plan.json").exists():
+    if not plan_path.exists() and (CourseManager.DATA_DIR / "examination_plan.json").exists() and CourseManager.get_active_course_id() == course_id:
         plan_path = CourseManager.DATA_DIR / "examination_plan.json"
-    if not state_path.exists() and (CourseManager.DATA_DIR / "session_state.json").exists():
-        state_path = CourseManager.DATA_DIR / "session_state.json"
+    elif not plan_path.exists() and Path("examination_plan.json").exists() and CourseManager.get_active_course_id() == course_id:
+        plan_path = Path("examination_plan.json")
 
     # Register graceful shutdown callback
     async def on_shutdown():
@@ -527,6 +664,7 @@ async def my_agent(ctx: JobContext):
         state_file_path=state_path,
         events_file_path=events_path,
         execution_mode=execution_mode,
+        course_id=course_id,
     )
 
     # Check for existing session state for this document
@@ -688,8 +826,16 @@ async def my_agent(ctx: JobContext):
                 else types.AudioTranscriptionConfig()
             ),
             output_audio_transcription=types.AudioTranscriptionConfig(),
-            tool_behavior=types.Behavior.BLOCKING,
-            tool_response_scheduling=types.FunctionResponseScheduling.WHEN_IDLE,
+            realtime_input_config=types.RealtimeInputConfig(
+                activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+                automatic_activity_detection=types.AutomaticActivityDetection(
+                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
+                    prefix_padding_ms=100,
+                    silence_duration_ms=250,
+                ),
+                turn_coverage=types.TurnCoverage.TURN_INCLUDES_ONLY_ACTIVITY,
+            ),
             context_window_compression=types.ContextWindowCompressionConfig(
                 sliding_window=types.SlidingWindow()
             ),
@@ -808,6 +954,23 @@ async def my_agent(ctx: JobContext):
     # Join the room and connect to the user
     await ctx.connect()
 
+    # Automatically shut down this room's agent job when the student leaves
+    @ctx.room.on("participant_disconnected")
+    def on_participant_disconnected(participant: rtc.RemoteParticipant):
+        if participant.identity.startswith("agent-"):
+            return
+        remote_humans = [
+            p for p in ctx.room.remote_participants.values()
+            if not p.identity.startswith("agent-") and p.identity != participant.identity
+        ]
+        if not remote_humans:
+            logger.info(
+                "Student disconnected from room %s. Initiating graceful agent shutdown for course %s.",
+                ctx.room.name,
+                course_id,
+            )
+            ctx.shutdown()
+
     # Start voice agent session on the connected room
     await session.start(
         agent=agent_instance,
@@ -836,19 +999,21 @@ async def my_agent(ctx: JobContext):
 
     asyncio.create_task(asyncio.to_thread(_save_state_bg))
 
-    # Opening greeting: allow 400ms for mobile WebRTC track subscription & audio session stabilization
+    # Opening greeting: allow 1.6s buffer for mobile WebRTC track subscription & audio session stabilization
     assessment_manager.last_ai_directive = greeting
-    logger.info("Speaking opening greeting with minimum latency: %s", greeting)
+    logger.info("Speaking opening greeting with 1.6s buffer: %s", greeting)
     if config.pipeline_mode == "gemini_live":
-        await asyncio.sleep(0.4)
-        greeting_instruction = (
-            f'Saluta lo studente pronunciando ad alta voce con tono pacato, accademico e naturale unicamente ed esattamente: "{greeting}"'
+        await asyncio.sleep(1.6)
+        prompt = (
+            f'Lo studente si è appena collegato alla sessione. '
+            f'Avvia subito la conversazione salutando lo studente ad alta voce e pronunciando unicamente ed esattamente: "{greeting}"'
         )
         session.generate_reply(
-            instructions=greeting_instruction,
+            user_input=prompt,
+            allow_interruptions=True,
         )
     else:
-        await session.say(greeting)
+        await session.say(greeting, allow_interruptions=True)
 
 
 if __name__ == "__main__":

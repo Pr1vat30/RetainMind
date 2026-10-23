@@ -1,8 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'theme/app_colors.dart';
+
+export 'theme/app_colors.dart';
+export 'theme/app_theme.dart';
 
 /// Design System constants according to HTML/DESIGN.md specification
 /// Movement: Tactile Modern Dark Minimalist with Ethereal Cyan Glow
+/// Also provides generated Light Theme tokens while preserving exact Dark Theme values.
 class AppConstants {
   static const String appTitle = 'Retain Mind';
   static const String appSubtitle = 'Assistente Vocale AI per Studio e Simulazioni Orali';
@@ -17,7 +22,12 @@ class AppConstants {
     return 'http://127.0.0.1:8000';
   }
 
-  // --- Palette & Semantic Tokens (HTML/Tailwind Specs) ---
+  // --- Context-Aware Design Token Helpers ---
+  static AppColors colors(BuildContext context) => AppColors.of(context);
+  static AppColors get darkColors => AppColors.dark();
+  static AppColors get lightColors => AppColors.light();
+
+  // --- Preserved Static Dark Theme Tokens (for backward compatibility) ---
 
   // Canvas Base & Matte Surfaces
   static const Color background = Color(0xFF121416);              // #121416 Canvas base
@@ -84,7 +94,7 @@ class AppConstants {
   static const double radiusMd = 16.0;
   static const double radiusSm = 12.0;
 
-  // Pedagogical State Colors
+  // Pedagogical State Colors (Static dark fallback)
   static Color getPedagogicalColor(String state) {
     switch (state.toUpperCase()) {
       case 'EXPLORATION':
@@ -100,5 +110,10 @@ class AppConstants {
       default:
         return primaryContainer;
     }
+  }
+
+  // Theme-aware pedagogical color
+  static Color pedagogicalColor(BuildContext context, String state) {
+    return AppColors.of(context).getPedagogicalColor(state);
   }
 }

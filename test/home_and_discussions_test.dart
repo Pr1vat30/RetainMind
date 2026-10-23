@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:retain_mind_def/models/session_models.dart';
-import 'package:retain_mind_def/providers/exam_provider.dart';
-import 'package:retain_mind_def/screens/discussion_detail_screen.dart';
-import 'package:retain_mind_def/screens/home_screen.dart';
-import 'package:retain_mind_def/screens/main_shell.dart';
-import 'package:retain_mind_def/screens/previous_discussions_screen.dart';
-import 'package:retain_mind_def/widgets/new_discussion_modal.dart';
+import 'package:retain_mind/models/session_models.dart';
+import 'package:retain_mind/providers/exam_provider.dart';
+import 'package:retain_mind/screens/discussion_detail_screen.dart';
+import 'package:retain_mind/screens/home_screen.dart';
+import 'package:retain_mind/screens/main_shell.dart';
+import 'package:retain_mind/screens/previous_discussions_screen.dart';
+import 'package:retain_mind/widgets/new_discussion_modal.dart';
 
 void main() {
   testWidgets('HomeScreen displays first-access UI adapted for empty state and file upload', (tester) async {

@@ -852,3 +852,50 @@ async def test_silence_filtering_in_service_and_courses(tmp_path: Path):
     assert len(transcript) == 1
     assert transcript[0]["student_response"] == "Risposta valida"
 
+
+@pytest.mark.asyncio
+async def test_resumed_session_readiness_confirmation():
+    from planning import ConceptPlanItem, ExaminationPlan, PlannedQuestion
+
+    gstore = InMemoryGraphStore()
+    vstore = InMemoryVectorStore()
+    c1 = ConceptNode(id="concept_a", name="Concetto A", summary="Descrizione.")
+    await gstore.upsert_concepts([c1])
+
+    q1 = PlannedQuestion(
+        question_id="q1",
+        concept_id="concept_a",
+        main_question="Spiegami il Concetto A.",
+        scaffolding_hints=["Indizio A."],
+    )
+    plan = ExaminationPlan(
+        plan_id="plan_res_1",
+        concept_order=["concept_a"],
+        items={
+            "concept_a": ConceptPlanItem(
+                concept_id="concept_a",
+                concept_name="Concetto A",
+                planned_question=q1,
+            )
+        },
+    )
+    manager = SessionAssessmentManager(
+        graph_store=gstore, vector_store=vstore, examination_plan=plan
+    )
+    manager.current_concept_id = "concept_a"
+    manager.history = [
+        {
+            "turn": 1,
+            "concept_id": "concept_a",
+            "evaluation": "RESUMED",
+            "transcript": "[SESSION_RESUMED]",
+        }
+    ]
+    manager.last_ai_directive = "Bentornato! Sei pronto a riprendere?"
+
+    ctx, ts = await manager.process_student_turn("Sì, possiamo riprendere.")
+    assert ts.graph_relation_followed == "PLAN_RESUME"
+    assert "Perfetto, riprendiamo!" in ctx.pedagogical_directive
+    assert "Spiegami il Concetto A." in ctx.pedagogical_directive
+    assert manager.history[-1]["evaluation"] == "READINESS_CONFIRMED"
+

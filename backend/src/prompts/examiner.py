@@ -54,10 +54,13 @@ def build_examiner_turn_prompt(context: ExaminerContext) -> str:
     concept = context.current_concept
     state_str = context.pedagogical_state.value
 
-    # Build ground truth passages text
+    # Build ground truth passages text (max 2 concise chunks to keep tool token processing fast)
     gt_lines = []
-    for i, p in enumerate(context.ground_truth_chunks, 1):
-        gt_lines.append(f"[{i}] {p.text.strip()}")
+    for i, p in enumerate(context.ground_truth_chunks[:2], 1):
+        p_text = p.text.strip()
+        if len(p_text) > 280:
+            p_text = p_text[:280] + "..."
+        gt_lines.append(f"[{i}] {p_text}")
     gt_text = (
         "\n".join(gt_lines)
         if gt_lines

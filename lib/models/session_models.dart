@@ -29,22 +29,26 @@ class SessionStatusInfo {
   final String status;
   final String studentId;
   final String currentConceptId;
+  final String currentQuestion;
   final String pedagogicalState;
   final int currentIteration;
   final double planProgressPercentage;
   final String planStep;
   final List<String> deferredQueue;
+  final String courseId;
 
   SessionStatusInfo({
     required this.hasActiveSession,
     required this.status,
     required this.studentId,
     required this.currentConceptId,
+    this.currentQuestion = '',
     required this.pedagogicalState,
     required this.currentIteration,
     required this.planProgressPercentage,
     required this.planStep,
     required this.deferredQueue,
+    this.courseId = '',
   });
 
   factory SessionStatusInfo.fromJson(Map<String, dynamic> json) {
@@ -53,6 +57,7 @@ class SessionStatusInfo {
       status: json['status'] as String? ?? 'NOT_INITIALIZED',
       studentId: json['student_id'] as String? ?? '',
       currentConceptId: json['current_concept_id'] as String? ?? '',
+      currentQuestion: json['current_question'] as String? ?? '',
       pedagogicalState: json['pedagogical_state'] as String? ?? 'EXPLORATION',
       currentIteration: json['current_iteration'] as int? ?? 1,
       planProgressPercentage: (json['plan_progress_percentage'] as num?)?.toDouble() ?? 0.0,
@@ -61,6 +66,7 @@ class SessionStatusInfo {
               ?.map((e) => e.toString())
               .toList() ??
           [],
+      courseId: json['course_id'] as String? ?? '',
     );
   }
 }

@@ -4,8 +4,6 @@ import '../constants.dart';
 import '../providers/exam_provider.dart';
 import '../widgets/avatar/avatar_models.dart';
 import '../widgets/avatar/grok_avatar.dart';
-import '../widgets/transcript_bubble.dart';
-import 'report_screen.dart';
 
 class ExamScreen extends StatefulWidget {
   const ExamScreen({super.key});
@@ -15,138 +13,55 @@ class ExamScreen extends StatefulWidget {
 }
 
 class _ExamScreenState extends State<ExamScreen> {
-  void _showTranscriptHistory(BuildContext context) {
-    final exam = context.read<ExamProvider>();
-    final turns = exam.transcriptTurns;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppConstants.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppConstants.radiusXl)),
-      ),
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.7,
-          minChildSize: 0.35,
-          maxChildSize: 0.92,
-          expand: false,
-          builder: (_, controller) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppConstants.surfaceHighest,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Storico della Sessione',
-                        style: TextStyle(
-                          color: AppConstants.textPrimary,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: AppConstants.textSecondary, size: 20),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                  const Divider(color: AppConstants.outline),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: turns.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'Nessun turno registrato finora.',
-                              style: TextStyle(color: AppConstants.textSecondary),
-                            ),
-                          )
-                        : ListView.builder(
-                            controller: controller,
-                            itemCount: turns.length,
-                            itemBuilder: (context, idx) {
-                              return TranscriptBubble(turn: turns[idx]);
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   void _confirmExit(BuildContext context) {
     final exam = context.read<ExamProvider>();
+    final colors = context.colors;
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppConstants.surface,
+        backgroundColor: colors.surfaceContainerHigh,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusLg)),
-        title: const Text(
-          'Concludere la simulazione?',
+        title: Text(
+          'Uscire dalla chiamata?',
           style: TextStyle(
-            color: AppConstants.textPrimary,
+            color: colors.textPrimary,
             fontSize: 17,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.2,
           ),
         ),
-        content: const Text(
-          'Puoi sospendere la sessione per riprenderla in un secondo momento, oppure terminarla per consultare il report finale.',
-          style: TextStyle(color: AppConstants.textSecondary, fontSize: 13, height: 1.35),
+        content: Text(
+          exam.isDirectTestMode
+              ? 'La sessione di test diretto verrà chiusa e tornerai alla home.'
+              : 'La sessione verrà salvata e tornerai alla schermata principale.',
+          style: TextStyle(color: colors.textSecondary, fontSize: 13, height: 1.35),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annulla', style: TextStyle(color: AppConstants.textSecondary)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await exam.pauseExam();
-              if (context.mounted) Navigator.pop(context);
-            },
-            child: const Text('Metti in Pausa', style: TextStyle(color: AppConstants.warning, fontWeight: FontWeight.w700)),
+            child: Text('Annulla', style: TextStyle(color: colors.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await exam.endExam();
+              if (exam.isDirectTestMode) {
+                await exam.endDirectTest();
+              } else {
+                await exam.pauseExam();
+              }
               if (context.mounted) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ReportScreen(showBackButton: true)),
-                );
+                Navigator.of(context).popUntil((route) => route.isFirst);
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppConstants.primary,
-              foregroundColor: AppConstants.onPrimary,
+              backgroundColor: colors.error,
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppConstants.radiusPill),
               ),
             ),
-            child: const Text('Termina Sessione', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text('Esci dalla chiamata', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -156,44 +71,56 @@ class _ExamScreenState extends State<ExamScreen> {
   @override
   Widget build(BuildContext context) {
     final exam = context.watch<ExamProvider>();
+    final colors = context.colors;
     final status = exam.sessionStatus;
-    final turns = exam.transcriptTurns;
     final mood = exam.avatarMood;
     final glow = exam.avatarGlowColor;
 
     final rawTopic = status?.currentConceptId ?? '';
-    final topicName = rawTopic.isNotEmpty
-        ? rawTopic.replaceAll('_', ' ')
-        : 'Simulazione Orale';
+    final topicName = exam.isDirectTestMode
+        ? '⚡ Test Vocale Diretto'
+        : (rawTopic.isNotEmpty ? rawTopic.replaceAll('_', ' ') : 'Simulazione Orale');
 
-    final latestTurn = turns.isNotEmpty ? turns.last : null;
+    final currentQuestion = exam.currentAiQuestion;
 
     String stateLabel;
-    switch (mood) {
-      case AvatarAgentMood.speaking:
+    if (exam.isDirectTestMode) {
+      if (exam.isAiSpeaking) {
         stateLabel = 'Docente AI sta parlando';
-        break;
-      case AvatarAgentMood.listening:
+      } else if (exam.isStudentSpeaking) {
         stateLabel = 'In ascolto della tua voce...';
-        break;
-      case AvatarAgentMood.thinking:
-        stateLabel = 'Elaborazione socratica';
-        break;
-      case AvatarAgentMood.scaffolding:
-        stateLabel = 'Guida personalizzata';
-        break;
-      case AvatarAgentMood.narrowing:
-        stateLabel = 'Approfondimento mirato';
-        break;
-      case AvatarAgentMood.collision:
-        stateLabel = 'Chiarimento concettuale';
-        break;
-      case AvatarAgentMood.paused:
-        stateLabel = 'Sessione in pausa';
-        break;
-      case AvatarAgentMood.idle:
-        stateLabel = 'Pronta per il tuo intervento';
-        break;
+      } else if (exam.isAiThinking) {
+        stateLabel = 'Elaborazione risposta...';
+      } else {
+        stateLabel = '⚡ Connessione Diretta Gemini';
+      }
+    } else {
+      switch (mood) {
+        case AvatarAgentMood.speaking:
+          stateLabel = 'Docente AI sta parlando';
+          break;
+        case AvatarAgentMood.listening:
+          stateLabel = 'In ascolto della tua voce...';
+          break;
+        case AvatarAgentMood.thinking:
+          stateLabel = 'Elaborazione socratica';
+          break;
+        case AvatarAgentMood.scaffolding:
+          stateLabel = 'Guida personalizzata';
+          break;
+        case AvatarAgentMood.narrowing:
+          stateLabel = 'Approfondimento mirato';
+          break;
+        case AvatarAgentMood.collision:
+          stateLabel = 'Chiarimento concettuale';
+          break;
+        case AvatarAgentMood.paused:
+          stateLabel = 'Sessione in pausa';
+          break;
+        case AvatarAgentMood.idle:
+          stateLabel = 'Pronta per il tuo intervento';
+          break;
+      }
     }
 
     return PopScope(
@@ -203,49 +130,49 @@ class _ExamScreenState extends State<ExamScreen> {
         _confirmExit(context);
       },
       child: Scaffold(
-        backgroundColor: AppConstants.background,
+        backgroundColor: colors.background,
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             child: Column(
               children: [
-                // 1. Top Navigation Bar
+                // 1. Top Navigation Bar (Close & Centered Topic Header)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.close_rounded, color: AppConstants.textSecondary),
+                      icon: Icon(Icons.close_rounded, color: colors.textSecondary),
+                      tooltip: 'Esci dalla chiamata',
                       onPressed: () => _confirmExit(context),
                     ),
-                    Column(
-                      children: [
-                        Text(
-                          topicName,
-                          style: const TextStyle(
-                            color: AppConstants.textPrimary,
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.2,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (status != null && status.planStep.isNotEmpty && status.planStep != '0/0')
+                    Expanded(
+                      child: Column(
+                        children: [
                           Text(
-                            'Passo ${status.planStep}',
-                            style: const TextStyle(
-                              color: AppConstants.primaryGlow,
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
+                            topicName,
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
                           ),
-                      ],
+                          if (!exam.isDirectTestMode && status != null && status.planStep.isNotEmpty && status.planStep != '0/0')
+                            Text(
+                              'Passo ${status.planStep}',
+                              style: TextStyle(
+                                color: colors.primaryGlow,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.history_rounded, color: AppConstants.textSecondary),
-                      tooltip: 'Storico conversazione',
-                      onPressed: () => _showTranscriptHistory(context),
-                    ),
+                    const SizedBox(width: 48), // Balances the leading close button
                   ],
                 ),
 
@@ -266,7 +193,7 @@ class _ExamScreenState extends State<ExamScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppConstants.surfaceCard,
+                    color: colors.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                     border: Border.all(color: glow.withValues(alpha: 0.35)),
                   ),
@@ -283,49 +210,80 @@ class _ExamScreenState extends State<ExamScreen> {
 
                 const Spacer(flex: 2),
 
-                // 3. Subtitle / Live Transcript Card
+                // 3. Question Card (Exclusive AI Question without conversational chatter)
                 Container(
                   width: double.infinity,
-                  constraints: const BoxConstraints(minHeight: 80, maxHeight: 120),
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  constraints: const BoxConstraints(minHeight: 88, maxHeight: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
-                    color: AppConstants.surfaceCard,
+                    color: colors.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(AppConstants.radiusLg),
-                    border: Border.all(color: AppConstants.outlineCard),
+                    border: Border.all(color: colors.outlineCard),
                   ),
-                  child: Center(
-                    child: latestTurn == null
-                        ? Text(
-                            exam.isConnected ? 'Inizia a parlare liberamente...' : 'Connessione alla stanza vocale...',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: AppConstants.textSecondary, fontSize: 13),
-                          )
-                        : Text(
-                            latestTurn.content,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: AppConstants.textPrimary,
-                              fontSize: 13.5,
-                              height: 1.35,
-                            ),
-                            maxLines: 4,
-                            overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            exam.isDirectTestMode ? Icons.bolt_rounded : Icons.help_outline_rounded,
+                            size: 13.5,
+                            color: glow,
                           ),
+                          const SizedBox(width: 6),
+                          Text(
+                            exam.isDirectTestMode ? "TEST DIRETTO STREAMING" : "DOMANDA D'ESAME",
+                            style: TextStyle(
+                              color: glow,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        exam.isDirectTestMode
+                            ? (exam.isAiSpeaking
+                                ? 'AI in conversazione diretta...'
+                                : 'Parla liberamente. Connessione audio diretta attiva senza database né filtri.')
+                            : (currentQuestion.isNotEmpty
+                                ? currentQuestion
+                                : (exam.isConnected
+                                    ? 'In attesa della domanda del docente...'
+                                    : 'Connessione alla stanza vocale...')),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                        ),
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
 
                 const SizedBox(height: 24),
 
-                // 4. Floating Control Dock (Tactile Modern Minimalist)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        // 4. Floating Control Dock (Tactile Minimalist: Mic ON/OFF + End Call only)
+                // RepaintBoundary isolates this static dock from the high-frequency
+                // avatar repaints (60fps loop animation).
+                RepaintBoundary(
+                  child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                   decoration: BoxDecoration(
-                    color: AppConstants.surfaceElevated,
+                    color: colors.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                    border: Border.all(color: AppConstants.outline),
+                    border: Border.all(color: colors.outlineCard),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
+                        color: colors.floatingNavShadow,
                         blurRadius: 24,
                         offset: const Offset(0, 8),
                       ),
@@ -334,59 +292,67 @@ class _ExamScreenState extends State<ExamScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Mute / Unmute
-                      IconButton(
-                        icon: Icon(
-                          exam.isMicMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-                          color: exam.isMicMuted ? AppConstants.error : AppConstants.textPrimary,
-                          size: 22,
+                      // Microphone ON / OFF
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => exam.toggleMicrophone(),
+                          borderRadius: BorderRadius.circular(AppConstants.radiusPill),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: exam.isMicMuted
+                                  ? colors.error.withValues(alpha: 0.16)
+                                  : colors.surfaceContainerHighest,
+                              border: Border.all(
+                                color: exam.isMicMuted
+                                    ? colors.error.withValues(alpha: 0.5)
+                                    : colors.outlineVariant,
+                              ),
+                            ),
+                            child: Icon(
+                              exam.isMicMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                              color: exam.isMicMuted ? colors.error : colors.textPrimary,
+                              size: 24,
+                            ),
+                          ),
                         ),
-                        tooltip: exam.isMicMuted ? 'Riattiva Microfono' : 'Disattiva Microfono',
-                        onPressed: () => exam.toggleMicrophone(),
                       ),
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 20),
 
-                      // Speakerphone / Earpiece
-                      IconButton(
-                        icon: Icon(
-                          exam.isSpeakerphoneOn ? Icons.volume_up_rounded : Icons.phone_in_talk_rounded,
-                          color: exam.isSpeakerphoneOn ? AppConstants.primaryGlow : AppConstants.textSecondary,
-                          size: 22,
+                      // End Call / Uscita dalla Chiamata
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => _confirmExit(context),
+                          borderRadius: BorderRadius.circular(AppConstants.radiusPill),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: colors.error,
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x66EF4444),
+                                  blurRadius: 14,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.call_end_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
                         ),
-                        tooltip: exam.isSpeakerphoneOn ? 'Vivavoce Hi-Fi Attivo' : 'Capsula Auricolare',
-                        onPressed: () => exam.toggleSpeakerphone(),
-                      ),
-                      const SizedBox(width: 14),
-
-                      // Pause / Resume
-                      IconButton(
-                        icon: Icon(
-                          status?.status == 'PAUSED' ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                          color: AppConstants.primaryGlow,
-                          size: 26,
-                        ),
-                        onPressed: () {
-                          if (status?.status == 'PAUSED') {
-                            exam.resumeExam();
-                          } else {
-                            exam.pauseExam();
-                          }
-                        },
-                      ),
-                      const SizedBox(width: 14),
-
-                      // Termina / Stop
-                      IconButton(
-                        icon: const Icon(
-                          Icons.stop_rounded,
-                          color: AppConstants.error,
-                          size: 22,
-                        ),
-                        onPressed: () => _confirmExit(context),
                       ),
                     ],
                   ),
                 ),
+                ), // End RepaintBoundary for control dock
 
                 const SizedBox(height: 12),
               ],

@@ -389,5 +389,29 @@ async def test_api_generate_from_topic(aiohttp_client, monkeypatch):
     assert (course_dir / "material.md").exists()
 
 
+@pytest.mark.asyncio
+async def test_api_session_warmup_endpoint(aiohttp_client):
+    """Verifies that /api/session/warmup issues a prewarmed token with dispatch configuration."""
+    app = create_app()
+    client = await aiohttp_client(app)
+
+    # 1. Warmup via POST
+    resp = await client.post("/api/session/warmup", json={"course_id": "test_course"})
+    assert resp.status == 200
+    data = await resp.json()
+    assert data["is_prewarmed"] is True
+    assert "participant_token" in data
+    assert "room_name" in data
+    assert "oral-exam-test_course-prewarm" in data["room_name"]
+
+    # 2. Warmup via GET
+    resp_get = await client.get("/api/session/warmup?course_id=test_course")
+    assert resp_get.status == 200
+    data_get = await resp_get.json()
+    assert data_get["is_prewarmed"] is True
+    assert "participant_token" in data_get
+
+
+
 
 

@@ -12,9 +12,10 @@ class SyllabusScreen extends StatelessWidget {
     final exam = context.watch<ExamProvider>();
     final plan = exam.examinationPlan;
     final currentConceptId = exam.sessionStatus?.currentConceptId;
+    final colors = context.colors;
 
     return Scaffold(
-      backgroundColor: AppConstants.background,
+      backgroundColor: colors.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
@@ -29,10 +30,10 @@ class SyllabusScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Programma di Studio',
                           style: TextStyle(
-                            color: AppConstants.textPrimary,
+                            color: colors.textPrimary,
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
                             letterSpacing: -0.4,
@@ -43,8 +44,8 @@ class SyllabusScreen extends StatelessWidget {
                           plan != null && plan.hasPlan
                               ? '${plan.title} • ${plan.totalConcepts} argomenti'
                               : 'Percorso di studio e sequenza didattica',
-                          style: const TextStyle(
-                            color: AppConstants.textSecondary,
+                          style: TextStyle(
+                            color: colors.textSecondary,
                             fontSize: 13,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -58,8 +59,8 @@ class SyllabusScreen extends StatelessWidget {
                     icon: const Icon(Icons.upload_file_rounded, size: 18),
                     label: const Text('Carica File', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppConstants.primaryContainer,
-                      foregroundColor: AppConstants.onPrimary,
+                      backgroundColor: colors.primaryContainer,
+                      foregroundColor: colors.onPrimaryContainer,
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppConstants.radiusPill),
@@ -80,23 +81,23 @@ class SyllabusScreen extends StatelessWidget {
                             Icon(
                               Icons.menu_book_outlined,
                               size: 44,
-                              color: AppConstants.textSecondary.withValues(alpha: 0.5),
+                              color: colors.textSecondary.withValues(alpha: 0.5),
                             ),
                             const SizedBox(height: 12),
-                            const Text(
+                            Text(
                               'Nessun programma didattico',
                               style: TextStyle(
-                                color: AppConstants.textPrimary,
+                                color: colors.textPrimary,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             const SizedBox(height: 6),
-                            const Text(
+                            Text(
                               'Carica dispense o slide in formato PDF per creare automaticamente\nil sillabo degli argomenti e avviare l\'interrogazione.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: AppConstants.textSecondary,
+                                color: colors.textSecondary,
                                 fontSize: 12.5,
                                 height: 1.4,
                               ),
@@ -112,8 +113,8 @@ class SyllabusScreen extends StatelessWidget {
                                   icon: const Icon(Icons.upload_file_rounded, size: 18),
                                   label: const Text('Carica Documento & Crea Sillabo'),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppConstants.primaryContainer,
-                                    foregroundColor: AppConstants.onPrimary,
+                                    backgroundColor: colors.primaryContainer,
+                                    foregroundColor: colors.onPrimaryContainer,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                                     ),
@@ -125,8 +126,8 @@ class SyllabusScreen extends StatelessWidget {
                                   icon: const Icon(Icons.refresh, size: 16),
                                   label: const Text('Ricarica'),
                                   style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppConstants.primaryGlow,
-                                    side: const BorderSide(color: AppConstants.outline),
+                                    foregroundColor: colors.primary,
+                                    side: BorderSide(color: colors.outlineCard),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                                     ),
@@ -149,13 +150,13 @@ class SyllabusScreen extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                             decoration: BoxDecoration(
                               color: isCurrent
-                                  ? AppConstants.primary.withValues(alpha: 0.12)
-                                  : AppConstants.surfaceCard,
+                                  ? colors.primary.withValues(alpha: 0.12)
+                                  : colors.surfaceContainerLow,
                               borderRadius: BorderRadius.circular(AppConstants.radiusMd),
                               border: Border.all(
                                 color: isCurrent
-                                    ? AppConstants.primary.withValues(alpha: 0.4)
-                                    : AppConstants.outlineCard,
+                                    ? colors.primary.withValues(alpha: 0.4)
+                                    : colors.outlineCard,
                               ),
                             ),
                             child: Column(
@@ -170,14 +171,14 @@ class SyllabusScreen extends StatelessWidget {
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
                                         color: isCurrent
-                                            ? AppConstants.primary
-                                            : AppConstants.surfaceElevated,
+                                            ? colors.primary
+                                            : colors.surfaceContainerHigh,
                                       ),
                                       alignment: Alignment.center,
                                       child: Text(
                                         '${index + 1}',
                                         style: TextStyle(
-                                          color: isCurrent ? AppConstants.onPrimary : AppConstants.textSecondary,
+                                          color: isCurrent ? colors.onPrimary : colors.textSecondary,
                                           fontSize: 12,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -192,8 +193,8 @@ class SyllabusScreen extends StatelessWidget {
                                             item.conceptName,
                                             style: TextStyle(
                                               color: isCurrent
-                                                  ? AppConstants.primaryGlow
-                                                  : AppConstants.textPrimary,
+                                                  ? colors.primaryGlow
+                                                  : colors.textPrimary,
                                               fontSize: 14,
                                               fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
                                             ),
@@ -202,8 +203,8 @@ class SyllabusScreen extends StatelessWidget {
                                             const SizedBox(height: 4),
                                             Text(
                                               item.mainQuestion,
-                                              style: const TextStyle(
-                                                color: AppConstants.textSecondary,
+                                              style: TextStyle(
+                                                color: colors.textSecondary,
                                                 fontSize: 12,
                                                 height: 1.25,
                                               ),
@@ -218,13 +219,13 @@ class SyllabusScreen extends StatelessWidget {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: AppConstants.primary.withValues(alpha: 0.2),
+                                          color: colors.primary.withValues(alpha: 0.2),
                                           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                                         ),
-                                        child: const Text(
+                                        child: Text(
                                           'In Corso',
                                           style: TextStyle(
-                                            color: AppConstants.primaryGlow,
+                                            color: colors.primaryGlow,
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -240,13 +241,13 @@ class SyllabusScreen extends StatelessWidget {
                                       return Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: AppConstants.surfaceElevated,
+                                          color: colors.surfaceContainerHigh,
                                           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                                         ),
                                         child: Text(
                                           'Prereq: ${p.replaceAll('_', ' ')}',
-                                          style: const TextStyle(
-                                            color: AppConstants.textTertiary,
+                                          style: TextStyle(
+                                            color: colors.textTertiary,
                                             fontSize: 10,
                                           ),
                                         ),

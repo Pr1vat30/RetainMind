@@ -40,7 +40,7 @@ class IngestionPipeline:
         document_id: str,
         structured_ontology: dict[str, Any] | None = None,
         use_llm: bool = True,
-        llm_model: str = "gemini-3.5-flash-lite",
+        llm_model: str = "gemini-3.8-flash",
     ) -> dict[str, Any]:
         """Ingests a document text and optional structured ontology schema."""
         # 1. Parse into semantic chunks
@@ -93,7 +93,7 @@ class IngestionPipeline:
         document_id: str | None = None,
         structured_ontology: dict[str, Any] | None = None,
         use_llm: bool = True,
-        llm_model: str = "gemini-3.5-flash-lite",
+        llm_model: str = "gemini-3.8-flash",
     ) -> dict[str, Any]:
         """Ingests a file (PDF, MD, TXT) from disk."""
         doc_id = document_id or Path(file_path).stem

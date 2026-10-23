@@ -42,30 +42,36 @@ class _AudioVisualizerState extends State<AudioVisualizer>
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     Color glowColor;
     String statusText;
     IconData statusIcon;
 
     if (widget.isMuted) {
-      glowColor = AppConstants.textSecondary;
+      glowColor = colors.textSecondary;
       statusText = 'MICROFONO MUTATO';
       statusIcon = Icons.mic_off;
     } else {
       switch (widget.speakingState) {
         case SpeakingStateEnum.aiSpeaking:
-          glowColor = AppConstants.primaryGlow;
+          glowColor = colors.primaryGlow;
           statusText = 'DOCENTE AI STA PARLANDO';
           statusIcon = Icons.volume_up;
           break;
         case SpeakingStateEnum.studentSpeaking:
-          glowColor = AppConstants.success;
+          glowColor = colors.success;
           statusText = 'TU STAI PARLANDO';
           statusIcon = Icons.mic;
           break;
         case SpeakingStateEnum.idle:
-          glowColor = AppConstants.accent;
+          glowColor = colors.accent;
           statusText = 'IN ASCOLTO';
           statusIcon = Icons.hearing;
+          break;
+        case SpeakingStateEnum.thinking:
+          glowColor = colors.warning;
+          statusText = 'ELABORAZIONE RISPOSTA';
+          statusIcon = Icons.psychology;
           break;
       }
     }
@@ -107,7 +113,7 @@ class _AudioVisualizerState extends State<AudioVisualizer>
                     height: 90,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: AppConstants.surface,
+                      color: colors.surfaceContainerLow,
                       border: Border.all(
                         color: glowColor,
                         width: 2.5,
@@ -128,8 +134,8 @@ class _AudioVisualizerState extends State<AudioVisualizer>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           decoration: BoxDecoration(
-            color: AppConstants.surface,
-            borderRadius: BorderRadius.circular(20),
+            color: colors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(AppConstants.radiusPill),
             border: Border.all(
               color: glowColor.withValues(alpha: 0.5),
               width: 1.2,

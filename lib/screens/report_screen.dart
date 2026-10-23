@@ -34,27 +34,28 @@ class _ReportScreenState extends State<ReportScreen> {
   Widget build(BuildContext context) {
     final exam = context.watch<ExamProvider>();
     final analytics = StudyAnalytics.fromHistory(exam.historyItems);
+    final colors = context.colors;
 
     return Scaffold(
-      backgroundColor: AppConstants.background,
+      backgroundColor: colors.background,
       appBar: widget.showBackButton
           ? AppBar(
-              backgroundColor: AppConstants.background,
+              backgroundColor: colors.background,
               elevation: 0,
               leading: IconButton(
-                icon: const Icon(Icons.arrow_back, color: AppConstants.textPrimary),
+                icon: Icon(Icons.arrow_back, color: colors.textPrimary),
                 onPressed: () => Navigator.pop(context),
               ),
-              title: const Text(
+              title: Text(
                 'Riepilogo Sessione',
-                style: TextStyle(color: AppConstants.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(color: colors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
               ),
             )
           : null,
       body: SafeArea(
         child: RefreshIndicator(
-          color: AppConstants.primaryContainer,
-          backgroundColor: AppConstants.surfaceContainerHigh,
+          color: colors.primaryContainer,
+          backgroundColor: colors.surfaceContainerHigh,
           onRefresh: () async {
             await Future.wait([
               exam.loadReport(),
@@ -68,19 +69,19 @@ class _ReportScreenState extends State<ReportScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (!widget.showBackButton) ...[
-                  const Text(
+                  Text(
                     'Report di Apprendimento',
                     style: TextStyle(
-                      color: AppConstants.textPrimary,
+                      color: colors.textPrimary,
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.4,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'Calendario delle sessioni, costanza e sintesi didattica',
-                    style: TextStyle(color: AppConstants.textSecondary, fontSize: 13),
+                    style: TextStyle(color: colors.textSecondary, fontSize: 13),
                   ),
                   const SizedBox(height: 18),
                 ],
@@ -90,9 +91,9 @@ class _ReportScreenState extends State<ReportScreen> {
                   margin: const EdgeInsets.only(bottom: 20),
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: AppConstants.surfaceContainerLow,
+                    color: colors.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                    border: Border.all(color: AppConstants.outlineCard),
+                    border: Border.all(color: colors.outlineCard),
                   ),
                   child: Row(
                     children: [
@@ -103,7 +104,7 @@ class _ReportScreenState extends State<ReportScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 9),
                             decoration: BoxDecoration(
                               color: _selectedSegment == 0
-                                  ? AppConstants.primaryContainer
+                                  ? colors.primaryContainer
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                             ),
@@ -114,16 +115,16 @@ class _ReportScreenState extends State<ReportScreen> {
                                   Icons.calendar_month_rounded,
                                   size: 16,
                                   color: _selectedSegment == 0
-                                      ? AppConstants.onPrimaryContainer
-                                      : AppConstants.textSecondary,
+                                      ? colors.onPrimaryContainer
+                                      : colors.textSecondary,
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
                                   'Calendario & Attività',
                                   style: TextStyle(
                                     color: _selectedSegment == 0
-                                        ? AppConstants.onPrimaryContainer
-                                        : AppConstants.textSecondary,
+                                        ? colors.onPrimaryContainer
+                                        : colors.textSecondary,
                                     fontSize: 12.5,
                                     fontWeight: _selectedSegment == 0 ? FontWeight.bold : FontWeight.w600,
                                   ),
@@ -140,7 +141,7 @@ class _ReportScreenState extends State<ReportScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 9),
                             decoration: BoxDecoration(
                               color: _selectedSegment == 1
-                                  ? AppConstants.primaryContainer
+                                  ? colors.primaryContainer
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                             ),
@@ -151,16 +152,16 @@ class _ReportScreenState extends State<ReportScreen> {
                                   Icons.psychology_rounded,
                                   size: 16,
                                   color: _selectedSegment == 1
-                                      ? AppConstants.onPrimaryContainer
-                                      : AppConstants.textSecondary,
+                                      ? colors.onPrimaryContainer
+                                      : colors.textSecondary,
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
                                   'Diagnostica IA',
                                   style: TextStyle(
                                     color: _selectedSegment == 1
-                                        ? AppConstants.onPrimaryContainer
-                                        : AppConstants.textSecondary,
+                                        ? colors.onPrimaryContainer
+                                        : colors.textSecondary,
                                     fontSize: 12.5,
                                     fontWeight: _selectedSegment == 1 ? FontWeight.bold : FontWeight.w600,
                                   ),
@@ -203,27 +204,27 @@ class _ReportScreenState extends State<ReportScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const GrokAvatar(
+                          GrokAvatar(
                             mood: AvatarAgentMood.idle,
                             size: 160,
-                            glowColor: AppConstants.primaryGlow,
+                            glowColor: colors.primaryGlow,
                           ),
                           const SizedBox(height: 24),
-                          const Text(
+                          Text(
                             'Not available',
                             style: TextStyle(
-                              color: AppConstants.textPrimary,
+                              color: colors.textPrimary,
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
                               letterSpacing: -0.2,
                             ),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                             'Funzionalità di diagnostica IA in arrivo',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: AppConstants.textSecondary,
+                              color: colors.textSecondary,
                               fontSize: 13,
                             ),
                           ),

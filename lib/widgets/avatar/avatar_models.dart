@@ -61,6 +61,7 @@ enum AvatarGesture {
   perk,        // Cheerful bounce & happy eyes on tap / greeting
   curiousTilt, // Inquisitive head tilt
   ponder,      // Thoughtful gaze & slight squint
+  wink,        // Playful wink with one eye and head tilt
 }
 
 class AvatarPose {

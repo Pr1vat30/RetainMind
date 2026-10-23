@@ -259,6 +259,7 @@ class SessionAssessmentManager:
         state_file_path: str | Path | None = None,
         events_file_path: str | Path | None = None,
         execution_mode: str = "local",
+        course_id: str | None = None,
     ) -> None:
         self.graph_store = graph_store
         self.vector_store = vector_store
@@ -268,6 +269,7 @@ class SessionAssessmentManager:
         self.evaluator = evaluator or ResponseEvaluator()
         self.examination_plan = examination_plan
         self.student_id = student_id
+        self.course_id = course_id
         self.state_file_path = Path(state_file_path) if state_file_path else None
         self.events_file_path = Path(events_file_path) if events_file_path else None
         self.execution_mode = execution_mode  # "console" | "local" | "cloud"
@@ -289,6 +291,7 @@ class SessionAssessmentManager:
         self._last_processed_ts: float = 0.0
         self._turn_lock: asyncio.Lock | None = None
         self._all_concepts_cache: list[ConceptNode] | None = None
+        self._concept_context_cache: dict[str, tuple] = {}
 
         if self.examination_plan and self.examination_plan.current_item:
             self.current_concept_id = self.examination_plan.current_item.concept_id
@@ -477,26 +480,44 @@ class SessionAssessmentManager:
                     summary="Target topic.",
                 )
 
-            # Retrieve ontological neighborhood and ground-truth chunks concurrently in parallel
-            (
-                prereqs,
-                causal_targets,
-                contrasting,
-                multi_hop,
-                all_concepts,
-                gt_chunks,
-            ) = await asyncio.gather(
-                self.graph_store.get_prerequisites(concept_id),
-                self.graph_store.get_causal_targets(concept_id),
-                self.graph_store.get_contrasting_concepts(concept_id),
-                self.graph_store.get_multi_hop_neighbors(concept_id, max_hops=2),
-                self._get_all_concepts_cached(),
-                self.vector_store.search(
-                    query=f"{current_concept.name} {current_concept.summary}",
-                    limit=3,
-                    concept_id_filter=current_concept.id,
-                ),
-            )
+            # Retrieve ontological neighborhood and ground-truth chunks concurrently in parallel (with per-concept caching)
+            if concept_id in self._concept_context_cache:
+                (
+                    prereqs,
+                    causal_targets,
+                    contrasting,
+                    multi_hop,
+                    all_concepts,
+                    gt_chunks,
+                ) = self._concept_context_cache[concept_id]
+            else:
+                (
+                    prereqs,
+                    causal_targets,
+                    contrasting,
+                    multi_hop,
+                    all_concepts,
+                    gt_chunks,
+                ) = await asyncio.gather(
+                    self.graph_store.get_prerequisites(concept_id),
+                    self.graph_store.get_causal_targets(concept_id),
+                    self.graph_store.get_contrasting_concepts(concept_id),
+                    self.graph_store.get_multi_hop_neighbors(concept_id, max_hops=2),
+                    self._get_all_concepts_cached(),
+                    self.vector_store.search(
+                        query=f"{current_concept.name} {current_concept.summary}",
+                        limit=3,
+                        concept_id_filter=current_concept.id,
+                    ),
+                )
+                self._concept_context_cache[concept_id] = (
+                    prereqs,
+                    causal_targets,
+                    contrasting,
+                    multi_hop,
+                    all_concepts,
+                    gt_chunks,
+                )
 
             # Check if student is confirming readiness (initial opening Turn 0 or session resumption)
             words = set(re.findall(r"\w+", msg_lower))
@@ -582,7 +603,7 @@ class SessionAssessmentManager:
                         "transcript": clean_text,
                         "student_transcript": clean_text,
                         "student_response": clean_text,
-                        "ai_question": f"Sei pronto a iniziare l'esame su {current_concept.name}?",
+                        "ai_question": curr_q,
                         "evaluation": "READINESS_CONFIRMED",
                         "directive": spoken_directive,
                     }
@@ -744,10 +765,10 @@ class SessionAssessmentManager:
         self.last_turn_assessment = turn_assessment
 
         now_iso = datetime.now().isoformat()
-        current_ai_question = self.last_ai_directive or (
+        current_ai_question = (
             plan_item.planned_question.main_question
-            if plan_item
-            else f"Mi parli di {current_concept.name}."
+            if plan_item and hasattr(plan_item, "planned_question") and hasattr(plan_item.planned_question, "main_question")
+            else (self.last_ai_directive or f"Mi parli di {current_concept.name}.")
         )
 
         # 5. Record full conversation turn history
@@ -1048,8 +1069,10 @@ class SessionAssessmentManager:
             {
                 "turn": len(self.history) + 1,
                 "concept_id": concept_id,
+                "concept_name": current_concept.name,
                 "transcript": "[SESSION_RESUMED]",
                 "evaluation": "RESUMED",
+                "ai_question": q_text,
                 "directive": spoken_directive,
             }
         )
@@ -1331,10 +1354,34 @@ class SessionAssessmentManager:
         self.history = data.get("history", [])
         self.iterations_history = data.get("iterations_history", [])
         self.events = data.get("events", [])
-        if data.get("examination_plan"):
+        if self.examination_plan is None and data.get("examination_plan"):
             self.examination_plan = ExaminationPlan.model_validate(
                 data["examination_plan"]
             )
+        elif self.examination_plan and data.get("examination_plan"):
+            saved_plan = data["examination_plan"]
+            saved_doc_id = saved_plan.get("document_id") or saved_plan.get("title")
+            curr_doc_id = self.examination_plan.document_id or self.examination_plan.title
+            if saved_doc_id and curr_doc_id and saved_doc_id != curr_doc_id:
+                logger.warning(
+                    "State file at %s has foreign plan for '%s' while manager is configured for '%s'. Ignoring foreign plan.",
+                    path,
+                    saved_doc_id,
+                    curr_doc_id,
+                )
+
+        # Guardrail: ensure current_concept_id belongs to the active course plan
+        if self.examination_plan and self.examination_plan.items:
+            if self.current_concept_id not in self.examination_plan.items:
+                logger.warning(
+                    "Restored current_concept_id '%s' not in plan items. Resetting to plan start.",
+                    self.current_concept_id,
+                )
+                self.current_concept_id = (
+                    self.examination_plan.concept_order[0]
+                    if self.examination_plan.concept_order
+                    else None
+                )
         logger.info(
             "Restored session assessment state from %s (Iteration %d, Status %s, Mode %s)",
             path,

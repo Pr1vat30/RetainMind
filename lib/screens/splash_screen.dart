@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../providers/exam_provider.dart';
@@ -63,6 +64,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     // 1. Asynchronously prefetch data without blocking or triggering setState during animation
     unawaited(() async {
       try {
+        // Pre-request microphone permission ahead of time so the user experiences zero audio lag/prompts
+        await Permission.microphone.request();
+
         final healthy = await exam.apiService.checkHealth();
         if (healthy && mounted) {
           await Future.wait([
@@ -70,6 +74,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             exam.fetchPlan(),
             exam.fetchHistory(),
           ]);
+
+          // Prewarm LiveKit room and voice agent for active course
+          await exam.prewarmExamSession();
         }
       } catch (_) {}
     }());
@@ -107,13 +114,15 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+
     return Scaffold(
-      backgroundColor: AppConstants.background,
+      backgroundColor: colors.background,
       body: Stack(
         fit: StackFit.expand,
         children: [
           // 1. Static Ambient Background Glow (RepaintBoundary to avoid GPU redraws)
-          const RepaintBoundary(
+          RepaintBoundary(
             child: Center(
               child: SizedBox(
                 width: 320,
@@ -123,11 +132,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        Color(0x1F38BDF8), // Subtle cyan glow ~12%
-                        Color(0x088ED5FF),
+                        colors.primaryContainer.withValues(alpha: 0.12),
+                        colors.primary.withValues(alpha: 0.05),
                         Colors.transparent,
                       ],
-                      stops: [0.0, 0.55, 1.0],
+                      stops: const [0.0, 0.55, 1.0],
                     ),
                   ),
                 ),
@@ -151,17 +160,17 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         height: 154,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: AppConstants.surfaceContainerHigh.withValues(alpha: 0.6),
+                          color: colors.surfaceContainerHigh.withValues(alpha: 0.6),
                           border: Border.all(
-                            color: AppConstants.primaryContainer.withValues(alpha: 0.3),
+                            color: colors.primaryContainer.withValues(alpha: 0.3),
                             width: 1.5,
                           ),
                         ),
-                        child: const Center(
+                        child: Center(
                           child: GrokAvatar(
                             mood: AvatarAgentMood.idle,
                             size: 132,
-                            glowColor: AppConstants.primaryContainer,
+                            glowColor: colors.primaryContainer,
                           ),
                         ),
                       ),
@@ -173,19 +182,19 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppConstants.surfaceContainerHigh,
+                        color: colors.surfaceContainerHigh,
                         borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                        border: Border.all(color: AppConstants.outlineCard),
+                        border: Border.all(color: colors.outlineCard),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(Icons.auto_awesome, color: AppConstants.primary, size: 14),
-                          SizedBox(width: 6),
+                        children: [
+                          Icon(Icons.auto_awesome, color: colors.primary, size: 14),
+                          const SizedBox(width: 6),
                           Text(
                             'AI VOICE TUTOR',
                             style: TextStyle(
-                              color: AppConstants.primary,
+                              color: colors.primary,
                               fontSize: 10.5,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.8,
@@ -198,10 +207,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     const SizedBox(height: 12),
 
                     // App Title
-                    const Text(
+                    Text(
                       AppConstants.appTitle,
                       style: TextStyle(
-                        color: AppConstants.textPrimary,
+                        color: colors.textPrimary,
                         fontSize: 32,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.6,
@@ -215,7 +224,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       AppConstants.appSubtitle,
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: AppConstants.textSecondary.withValues(alpha: 0.85),
+                        color: colors.textSecondary.withValues(alpha: 0.85),
                         fontSize: 13,
                         fontWeight: FontWeight.w400,
                       ),
@@ -229,9 +238,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       height: 3.0,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                        child: const LinearProgressIndicator(
-                          backgroundColor: AppConstants.surfaceContainerHigh,
-                          valueColor: AlwaysStoppedAnimation<Color>(AppConstants.primaryContainer),
+                        child: LinearProgressIndicator(
+                          backgroundColor: colors.surfaceContainerHigh,
+                          valueColor: AlwaysStoppedAnimation<Color>(colors.primaryContainer),
                         ),
                       ),
                     ),
@@ -239,10 +248,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     const SizedBox(height: 14),
 
                     // Quiet Status
-                    const Text(
+                    Text(
                       'Caricamento tutor vocale...',
                       style: TextStyle(
-                        color: AppConstants.textTertiary,
+                        color: colors.textTertiary,
                         fontSize: 11.5,
                         fontWeight: FontWeight.w500,
                       ),
@@ -262,7 +271,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 child: Text(
                   'Powered by LiveKit & Gemini AI',
                   style: TextStyle(
-                    color: AppConstants.textTertiary.withValues(alpha: 0.5),
+                    color: colors.textTertiary.withValues(alpha: 0.5),
                     fontSize: 11,
                     letterSpacing: 0.2,
                   ),

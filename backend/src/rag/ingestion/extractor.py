@@ -127,7 +127,7 @@ class KnowledgeExtractor:
         cls,
         text: str,
         client: Any | None = None,
-        model: str = "gemini-3.5-flash-lite",
+        model: str = "gemini-3.8-flash",
     ) -> dict[str, Any]:
         """Resiliently parse and repair JSON returned by the LLM."""
         if not text or not text.strip():
@@ -143,30 +143,24 @@ class KnowledgeExtractor:
             if start != -1 and end != -1 and end > start:
                 cleaned = cleaned[start : end + 1]
 
-        # 1. Direct standard parse attempt (pre-repair invalid JSON escape sequences like \s, \d, \alpha)
+        # 1. Direct standard parse attempt (pre-repair invalid escape sequences and trailing commas)
         cleaned_escapes = re.sub(r'\\(?![/\\\"bfnrt]|u[0-9a-fA-F]{4})', r'\\\\', cleaned)
+        cleaned_escapes = re.sub(r",\s*([\]}])", r"\1", cleaned_escapes)
         initial_err: Exception | None = None
         try:
             return json.loads(cleaned_escapes)
         except json.JSONDecodeError as err:
             initial_err = err
-            logger.warning(
-                "Tentativo json.loads diretto fallito (%s). Applicazione repair regex...",
+            logger.debug(
+                "Tentativo json.loads diretto necessita normalizzazione (%s). Applicazione repair...",
                 err,
             )
 
-        # 2. Repair trailing commas before closing braces/brackets
-        repaired = re.sub(r",\s*([\]}])", r"\1", cleaned_escapes)
-        try:
-            return json.loads(repaired)
-        except json.JSONDecodeError:
-            pass
-
-        # 3. Repair unescaped newlines/tabs inside string literals
+        # 2. Repair unescaped newlines/tabs inside string literals
         repaired_lines = []
         in_string = False
         escape = False
-        for ch in repaired:
+        for ch in cleaned_escapes:
             if ch == '"' and not escape:
                 in_string = not in_string
             if in_string and ch == "\n":
@@ -179,6 +173,7 @@ class KnowledgeExtractor:
                 repaired_lines.append(ch)
             escape = bool(ch == "\\" and not escape)
         repaired_ctrl = "".join(repaired_lines)
+        repaired_ctrl = re.sub(r",\s*([\]}])", r"\1", repaired_ctrl)
         try:
             return json.loads(repaired_ctrl)
         except json.JSONDecodeError:
@@ -243,9 +238,9 @@ class KnowledgeExtractor:
     def extract_with_llm(
         cls,
         chunks: list[DocumentChunk],
-        model: str = "gemini-3.5-flash-lite",
+        model: str = "gemini-3.8-flash",
         api_key: str | None = None,
-        timeout_seconds: float = 35.0,
+        timeout_seconds: float = 90.0,
     ) -> tuple[list[ConceptNode], list[ConceptRelation], list[CausalChain]]:
         """Extracts deep semantic ontology, ideal reference answers, and questions using Gemini."""
         key = api_key or os.getenv("GOOGLE_API_KEY", "")
@@ -319,29 +314,23 @@ MATERIALE DIDATTICO:
 """
 
             def _call_gemini() -> str:
-                # Use generate_content with strict response_mime_type="application/json"
-                try:
-                    response = client.models.generate_content(
-                        model=model,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json",
-                            temperature=0.2,
-                            automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                                disable=True
-                            ),
-                        ),
-                    )
-                    return response.text or ""
-                except Exception as e_first:
-                    logger.warning(
-                        "generate_content with %s failed (%s), trying gemini-3.8-flash",
-                        model,
-                        e_first,
-                    )
+                candidate_models = [model]
+                for fb in [
+                    "gemini-3.8-flash",
+                    "gemini-3.6-flash",
+                    "gemini-3.5-flash",
+                    "gemini-3-flash-preview",
+                    "gemini-3.5-flash-lite",
+                ]:
+                    if fb not in candidate_models:
+                        candidate_models.append(fb)
+
+                last_error: Exception | None = None
+                for candidate in candidate_models:
                     try:
+                        logger.info("Tentativo di estrazione concetti con modello '%s'...", candidate)
                         response = client.models.generate_content(
-                            model="gemini-3.8-flash",
+                            model=candidate,
                             contents=prompt,
                             config=types.GenerateContentConfig(
                                 response_mime_type="application/json",
@@ -351,9 +340,19 @@ MATERIALE DIDATTICO:
                                 ),
                             ),
                         )
-                        return response.text or ""
-                    except Exception:
-                        raise e_first from None
+                        if response and response.text:
+                            return response.text
+                    except Exception as err:
+                        logger.warning(
+                            "generate_content con modello '%s' fallito: %s",
+                            candidate,
+                            err,
+                        )
+                        last_error = err
+
+                if last_error:
+                    raise last_error
+                raise RuntimeError("Nessuna risposta valida ricevuta dai modelli Gemini.")
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(_call_gemini)
@@ -442,9 +441,9 @@ MATERIALE DIDATTICO:
     def extract_from_topic(
         cls,
         topic: str,
-        model: str = "gemini-3.5-flash-lite",
+        model: str = "gemini-3.8-flash",
         api_key: str | None = None,
-        timeout_seconds: float = 40.0,
+        timeout_seconds: float = 90.0,
     ) -> dict[str, Any]:
         """Generates an academic curriculum, study summary, and structured examination ontology from a topic prompt."""
         key = api_key or os.getenv("GOOGLE_API_KEY", "")
@@ -509,28 +508,23 @@ Restituisci ESCLUSIVAMENTE un JSON valido con questa struttura:
 """
 
             def _call_gemini() -> str:
-                try:
-                    response = client.models.generate_content(
-                        model=model,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json",
-                            temperature=0.3,
-                            automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                                disable=True
-                            ),
-                        ),
-                    )
-                    return response.text or ""
-                except Exception as e_first:
-                    logger.warning(
-                        "generate_content from topic with %s failed (%s), trying gemini-3.8-flash",
-                        model,
-                        e_first,
-                    )
+                candidate_models = [model]
+                for fb in [
+                    "gemini-3.8-flash",
+                    "gemini-3.6-flash",
+                    "gemini-3.5-flash",
+                    "gemini-3-flash-preview",
+                    "gemini-3.5-flash-lite",
+                ]:
+                    if fb not in candidate_models:
+                        candidate_models.append(fb)
+
+                last_error: Exception | None = None
+                for candidate in candidate_models:
                     try:
+                        logger.info("Tentativo di generazione esame da argomento con modello '%s'...", candidate)
                         response = client.models.generate_content(
-                            model="gemini-3.8-flash",
+                            model=candidate,
                             contents=prompt,
                             config=types.GenerateContentConfig(
                                 response_mime_type="application/json",
@@ -540,9 +534,19 @@ Restituisci ESCLUSIVAMENTE un JSON valido con questa struttura:
                                 ),
                             ),
                         )
-                        return response.text or ""
-                    except Exception:
-                        raise e_first from None
+                        if response and response.text:
+                            return response.text
+                    except Exception as err:
+                        logger.warning(
+                            "generate_content from topic con modello '%s' fallito: %s",
+                            candidate,
+                            err,
+                        )
+                        last_error = err
+
+                if last_error:
+                    raise last_error
+                raise RuntimeError("Nessuna risposta valida ricevuta dai modelli Gemini.")
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(_call_gemini)

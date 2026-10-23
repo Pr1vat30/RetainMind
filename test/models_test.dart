@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:retain_mind_def/models/session_models.dart';
+import 'package:retain_mind/models/session_models.dart';
 
 void main() {
   group('Session models serialization tests', () {

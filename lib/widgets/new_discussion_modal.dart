@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../constants.dart';
 import '../providers/exam_provider.dart';
-import '../screens/exam_screen.dart';
+import 'exam_launch_loader.dart';
 
 enum NewDiscussionMode { uploadDocument, aiTopic }
 
@@ -39,6 +39,7 @@ class NewDiscussionModal extends StatefulWidget {
 }
 
 class _NewDiscussionModalState extends State<NewDiscussionModal> {
+  AppColors get colors => context.colors;
   // Mode selection: DEFAULT IS uploadDocument as requested
   late NewDiscussionMode _currentMode;
 
@@ -187,10 +188,15 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
         );
 
         if (mounted) {
-          Navigator.pop(context);
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ExamScreen()),
+          final nav = Navigator.of(context);
+          nav.pop();
+          await launchExamWithLoader(
+            nav.context,
+            onConnect: () async {
+              await exam.fetchStatus();
+            },
+            initialSubtitle: 'Caricamento informazioni e messaggi...',
+            completedSubtitle: 'Documento pronto! Si comincia 😉',
           );
         }
       } catch (e) {
@@ -227,10 +233,15 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
         );
 
         if (mounted) {
-          Navigator.pop(context);
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ExamScreen()),
+          final nav = Navigator.of(context);
+          nav.pop();
+          await launchExamWithLoader(
+            nav.context,
+            onConnect: () async {
+              await exam.fetchStatus();
+            },
+            initialSubtitle: 'Generazione programma e messaggi...',
+            completedSubtitle: 'Materia generata! Si comincia 😉',
           );
         }
       } catch (e) {
@@ -267,11 +278,11 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppConstants.primaryContainer.withValues(alpha: 0.16)
-              : AppConstants.surfaceContainerHigh.withValues(alpha: 0.45),
+              ? colors.primaryContainer.withValues(alpha: 0.16)
+              : colors.surfaceContainerHigh.withValues(alpha: 0.45),
           borderRadius: BorderRadius.circular(AppConstants.radiusMd),
           border: Border.all(
-            color: isSelected ? AppConstants.primaryContainer : AppConstants.outlineVariant.withValues(alpha: 0.5),
+            color: isSelected ? colors.primaryContainer : colors.outlineVariant.withValues(alpha: 0.5),
             width: isSelected ? 1.6 : 1.0,
           ),
         ),
@@ -281,13 +292,13 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? AppConstants.primaryContainer.withValues(alpha: 0.22)
-                    : AppConstants.surfaceContainerHighest,
+                    ? colors.primaryContainer.withValues(alpha: 0.22)
+                    : colors.surfaceContainerHighest,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 icon,
-                color: isSelected ? AppConstants.primaryContainer : AppConstants.textSecondary,
+                color: isSelected ? colors.primaryContainer : colors.textSecondary,
                 size: 18,
               ),
             ),
@@ -302,7 +313,7 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                         child: Text(
                           title,
                           style: TextStyle(
-                            color: isSelected ? AppConstants.primaryContainer : AppConstants.textPrimary,
+                            color: isSelected ? colors.primaryContainer : colors.textPrimary,
                             fontSize: 12.5,
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                           ),
@@ -315,13 +326,13 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                           decoration: BoxDecoration(
-                            color: AppConstants.primaryContainer.withValues(alpha: 0.2),
+                            color: colors.primaryContainer.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text(
+                          child: Text(
                             'DEFAULT',
                             style: TextStyle(
-                              color: AppConstants.primaryContainer,
+                              color: colors.primaryContainer,
                               fontSize: 8.5,
                               fontWeight: FontWeight.bold,
                             ),
@@ -334,7 +345,7 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: isSelected ? AppConstants.textSecondary : AppConstants.textTertiary,
+                      color: isSelected ? colors.textSecondary : colors.textTertiary,
                       fontSize: 10.5,
                     ),
                     maxLines: 1,
@@ -357,8 +368,8 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.90,
       ),
-      decoration: const BoxDecoration(
-        color: AppConstants.surfaceContainer,
+      decoration: BoxDecoration(
+        color: colors.surfaceContainer,
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppConstants.radiusHero)),
         boxShadow: [
           BoxShadow(
@@ -384,7 +395,7 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
               width: 44,
               height: 4.5,
               decoration: BoxDecoration(
-                color: AppConstants.outlineVariant.withValues(alpha: 0.6),
+                color: colors.outlineVariant.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(AppConstants.radiusPill),
               ),
             ),
@@ -398,12 +409,12 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: AppConstants.primaryContainer.withValues(alpha: 0.18),
+                  color: colors.primaryContainer.withValues(alpha: 0.18),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.school_rounded,
-                  color: AppConstants.primaryContainer,
+                  color: colors.primaryContainer,
                   size: 22,
                 ),
               ),
@@ -411,11 +422,11 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text(
                       'Nuova Discussione Orale',
                       style: TextStyle(
-                        color: AppConstants.textPrimary,
+                        color: colors.textPrimary,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -0.3,
@@ -425,7 +436,7 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                     Text(
                       'Scegli se caricare un documento o generare dall\'IA',
                       style: TextStyle(
-                        color: AppConstants.textSecondary,
+                        color: colors.textSecondary,
                         fontSize: 12,
                       ),
                     ),
@@ -433,7 +444,7 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.close_rounded, color: AppConstants.textSecondary),
+                icon: Icon(Icons.close_rounded, color: colors.textSecondary),
                 onPressed: _isUploading ? null : () => Navigator.pop(context),
               ),
             ],
@@ -479,18 +490,18 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
-                        color: AppConstants.error.withValues(alpha: 0.15),
+                        color: colors.error.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(AppConstants.radiusSm),
-                        border: Border.all(color: AppConstants.error.withValues(alpha: 0.4)),
+                        border: Border.all(color: colors.error.withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline_rounded, color: AppConstants.error, size: 18),
+                          Icon(Icons.error_outline_rounded, color: colors.error, size: 18),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: const TextStyle(color: AppConstants.error, fontSize: 12),
+                              style: TextStyle(color: colors.error, fontSize: 12),
                             ),
                           ),
                         ],
@@ -501,10 +512,10 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
 
                   // MODE 1: UPLOAD DOCUMENT (DEFAULT)
                   if (_currentMode == NewDiscussionMode.uploadDocument) ...[
-                    const Text(
+                    Text(
                       'Carica Documento di Studio (PDF, Slide o TXT)',
                       style: TextStyle(
-                        color: AppConstants.textPrimary,
+                        color: colors.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -518,10 +529,10 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                           decoration: BoxDecoration(
-                            color: AppConstants.surfaceContainerHigh.withValues(alpha: 0.5),
+                            color: colors.surfaceContainerHigh.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(AppConstants.radiusLg),
                             border: Border.all(
-                              color: AppConstants.outlineVariant,
+                              color: colors.outlineVariant,
                               style: BorderStyle.solid,
                             ),
                           ),
@@ -532,28 +543,28 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                                 height: 44,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: AppConstants.primaryContainer.withValues(alpha: 0.15),
+                                  color: colors.primaryContainer.withValues(alpha: 0.15),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.upload_file_rounded,
-                                  color: AppConstants.primaryContainer,
+                                  color: colors.primaryContainer,
                                   size: 24,
                                 ),
                               ),
                               const SizedBox(height: 10),
-                              const Text(
+                              Text(
                                 'Tocca per selezionare PDF o dispense',
                                 style: TextStyle(
-                                  color: AppConstants.textPrimary,
+                                  color: colors.textPrimary,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              const Text(
+                              Text(
                                 'Supporta .pdf, .txt, .md, .docx • L\'IA estrarrà il piano d\'esame',
                                 style: TextStyle(
-                                  color: AppConstants.textTertiary,
+                                  color: colors.textTertiary,
                                   fontSize: 11,
                                 ),
                               ),
@@ -565,13 +576,13 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
-                          color: AppConstants.primaryContainer.withValues(alpha: 0.12),
+                          color: colors.primaryContainer.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(AppConstants.radiusLg),
-                          border: Border.all(color: AppConstants.primaryContainer.withValues(alpha: 0.4)),
+                          border: Border.all(color: colors.primaryContainer.withValues(alpha: 0.4)),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.description_rounded, color: AppConstants.primaryContainer, size: 28),
+                            Icon(Icons.description_rounded, color: colors.primaryContainer, size: 28),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -579,8 +590,8 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                                 children: [
                                   Text(
                                     _selectedFileName!,
-                                    style: const TextStyle(
-                                      color: AppConstants.textPrimary,
+                                    style: TextStyle(
+                                      color: colors.textPrimary,
                                       fontSize: 13,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -590,8 +601,8 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                                   if (_selectedFileSize != null)
                                     Text(
                                       _formatFileSize(_selectedFileSize!),
-                                      style: const TextStyle(
-                                        color: AppConstants.textSecondary,
+                                      style: TextStyle(
+                                        color: colors.textSecondary,
                                         fontSize: 11,
                                       ),
                                     ),
@@ -599,7 +610,7 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.cancel_rounded, color: AppConstants.textSecondary, size: 20),
+                              icon: Icon(Icons.cancel_rounded, color: colors.textSecondary, size: 20),
                               onPressed: _isUploading ? null : _clearSelectedFile,
                             ),
                           ],
@@ -608,10 +619,10 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
 
                     const SizedBox(height: 16),
 
-                    const Text(
+                    Text(
                       'Materia o Titolo Corso (Facoltativo)',
                       style: TextStyle(
-                        color: AppConstants.textPrimary,
+                        color: colors.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -620,27 +631,27 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                     TextField(
                       controller: _titleController,
                       enabled: !_isUploading,
-                      style: const TextStyle(color: AppConstants.textPrimary, fontSize: 13.5),
+                      style: TextStyle(color: colors.textPrimary, fontSize: 13.5),
                       decoration: InputDecoration(
                         hintText: 'es. Diritto Pubblico, Reti di Calcolatori, Anatomia...',
-                        hintStyle: const TextStyle(color: AppConstants.textTertiary, fontSize: 12.5),
+                        hintStyle: TextStyle(color: colors.textTertiary, fontSize: 12.5),
                         filled: true,
-                        fillColor: AppConstants.surfaceContainerHigh,
+                        fillColor: colors.surfaceContainerHigh,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(AppConstants.radiusMd),
                           borderSide: BorderSide.none,
                         ),
-                        prefixIcon: const Icon(Icons.school_rounded, color: AppConstants.textSecondary, size: 18),
+                        prefixIcon: Icon(Icons.school_rounded, color: colors.textSecondary, size: 18),
                       ),
                     ),
 
                     const SizedBox(height: 16),
 
-                    const Text(
+                    Text(
                       'Oppure Incolla Appunti / Sintesi',
                       style: TextStyle(
-                        color: AppConstants.textPrimary,
+                        color: colors.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -650,12 +661,12 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                       controller: _notesController,
                       enabled: !_isUploading,
                       maxLines: 3,
-                      style: const TextStyle(color: AppConstants.textPrimary, fontSize: 13),
+                      style: TextStyle(color: colors.textPrimary, fontSize: 13),
                       decoration: InputDecoration(
                         hintText: 'Incolla qui testi, dispense o capitoli chiave...',
-                        hintStyle: const TextStyle(color: AppConstants.textTertiary, fontSize: 12),
+                        hintStyle: TextStyle(color: colors.textTertiary, fontSize: 12),
                         filled: true,
-                        fillColor: AppConstants.surfaceContainerHigh,
+                        fillColor: colors.surfaceContainerHigh,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(AppConstants.radiusMd),
@@ -666,10 +677,10 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
 
                     const SizedBox(height: 14),
 
-                    const Text(
+                    Text(
                       'Oppure scegli una materia di esempio',
                       style: TextStyle(
-                        color: AppConstants.textSecondary,
+                        color: colors.textSecondary,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -684,16 +695,16 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                           label: Text(
                             item['title']!,
                             style: TextStyle(
-                              color: isSelected ? AppConstants.onPrimary : AppConstants.textPrimary,
+                              color: isSelected ? colors.onPrimary : colors.textPrimary,
                               fontSize: 11.5,
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                             ),
                           ),
                           selected: isSelected,
-                          selectedColor: AppConstants.primaryContainer,
-                          backgroundColor: AppConstants.surfaceContainerHigh,
+                          selectedColor: colors.primaryContainer,
+                          backgroundColor: colors.surfaceContainerHigh,
                           side: BorderSide(
-                            color: isSelected ? AppConstants.primaryContainer : AppConstants.outlineVariant,
+                            color: isSelected ? colors.primaryContainer : colors.outlineVariant,
                           ),
                           onSelected: _isUploading ? null : (_) => _selectSampleTopic(item),
                         );
@@ -704,20 +715,20 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppConstants.primaryContainer.withValues(alpha: 0.10),
+                        color: colors.primaryContainer.withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(AppConstants.radiusMd),
-                        border: Border.all(color: AppConstants.primaryContainer.withValues(alpha: 0.25)),
+                        border: Border.all(color: colors.primaryContainer.withValues(alpha: 0.25)),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Icon(Icons.auto_awesome_rounded, color: AppConstants.primaryContainer, size: 20),
+                        children: [
+                          Icon(Icons.auto_awesome_rounded, color: colors.primaryContainer, size: 20),
                           SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               'Nessun file necessario: l\'IA strutturerà un intero esame accademico (concetti, domande e risposte ideali) direttamente sull\'argomento indicato.',
                               style: TextStyle(
-                                color: AppConstants.textSecondary,
+                                color: colors.textSecondary,
                                 fontSize: 12,
                                 height: 1.35,
                               ),
@@ -728,10 +739,10 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                     ),
                     const SizedBox(height: 16),
 
-                    const Text(
+                    Text(
                       'Argomento o Tema d\'Esame',
                       style: TextStyle(
-                        color: AppConstants.textPrimary,
+                        color: colors.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -741,27 +752,27 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                       controller: _topicController,
                       enabled: !_isUploading,
                       maxLines: 2,
-                      style: const TextStyle(color: AppConstants.textPrimary, fontSize: 13.5),
+                      style: TextStyle(color: colors.textPrimary, fontSize: 13.5),
                       decoration: InputDecoration(
                         hintText: 'es. Meccanica Quantistica, Diritto Penale: Reati contro il Patrimonio, Reti Neurali...',
-                        hintStyle: const TextStyle(color: AppConstants.textTertiary, fontSize: 12.5),
+                        hintStyle: TextStyle(color: colors.textTertiary, fontSize: 12.5),
                         filled: true,
-                        fillColor: AppConstants.surfaceContainerHigh,
+                        fillColor: colors.surfaceContainerHigh,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(AppConstants.radiusMd),
                           borderSide: BorderSide.none,
                         ),
-                        prefixIcon: const Icon(Icons.psychology_rounded, color: AppConstants.primaryContainer, size: 20),
+                        prefixIcon: Icon(Icons.psychology_rounded, color: colors.primaryContainer, size: 20),
                       ),
                     ),
 
                     const SizedBox(height: 16),
 
-                    const Text(
+                    Text(
                       'Materia / Titolo Corso (Facoltativo)',
                       style: TextStyle(
-                        color: AppConstants.textPrimary,
+                        color: colors.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -770,27 +781,27 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                     TextField(
                       controller: _titleController,
                       enabled: !_isUploading,
-                      style: const TextStyle(color: AppConstants.textPrimary, fontSize: 13.5),
+                      style: TextStyle(color: colors.textPrimary, fontSize: 13.5),
                       decoration: InputDecoration(
                         hintText: 'es. Diritto Penale I, Fisica Moderna...',
-                        hintStyle: const TextStyle(color: AppConstants.textTertiary, fontSize: 12.5),
+                        hintStyle: TextStyle(color: colors.textTertiary, fontSize: 12.5),
                         filled: true,
-                        fillColor: AppConstants.surfaceContainerHigh,
+                        fillColor: colors.surfaceContainerHigh,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(AppConstants.radiusMd),
                           borderSide: BorderSide.none,
                         ),
-                        prefixIcon: const Icon(Icons.school_rounded, color: AppConstants.textSecondary, size: 18),
+                        prefixIcon: Icon(Icons.school_rounded, color: colors.textSecondary, size: 18),
                       ),
                     ),
 
                     const SizedBox(height: 16),
 
-                    const Text(
+                    Text(
                       'Suggerimenti di Argomenti Rapidi',
                       style: TextStyle(
-                        color: AppConstants.textSecondary,
+                        color: colors.textSecondary,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -805,19 +816,19 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                           avatar: Icon(
                             Icons.bolt_rounded,
                             size: 15,
-                            color: isSelected ? AppConstants.onPrimary : AppConstants.primaryContainer,
+                            color: isSelected ? colors.onPrimary : colors.primaryContainer,
                           ),
                           label: Text(
                             topic,
                             style: TextStyle(
-                              color: isSelected ? AppConstants.onPrimary : AppConstants.textPrimary,
+                              color: isSelected ? colors.onPrimary : colors.textPrimary,
                               fontSize: 11.5,
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                             ),
                           ),
-                          backgroundColor: isSelected ? AppConstants.primaryContainer : AppConstants.surfaceContainerHigh,
+                          backgroundColor: isSelected ? colors.primaryContainer : colors.surfaceContainerHigh,
                           side: BorderSide(
-                            color: isSelected ? AppConstants.primaryContainer : AppConstants.outlineVariant,
+                            color: isSelected ? colors.primaryContainer : colors.outlineVariant,
                           ),
                           onPressed: _isUploading ? null : () => _selectAiTopic(topic),
                         );
@@ -839,24 +850,24 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
               child: ElevatedButton(
                 onPressed: _isUploading ? null : _submitAndStartExam,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppConstants.primaryContainer,
-                  foregroundColor: AppConstants.onPrimary,
+                  backgroundColor: colors.primaryContainer,
+                  foregroundColor: colors.onPrimary,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                   ),
                   elevation: 6,
-                  shadowColor: AppConstants.primaryContainer.withValues(alpha: 0.4),
+                  shadowColor: colors.primaryContainer.withValues(alpha: 0.4),
                 ),
                 child: _isUploading
                     ? Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const SizedBox(
+                          SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.5,
-                              color: AppConstants.onPrimary,
+                              color: colors.onPrimary,
                             ),
                           ),
                           const SizedBox(width: 12),

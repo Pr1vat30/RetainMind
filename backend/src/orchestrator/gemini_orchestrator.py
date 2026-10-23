@@ -62,7 +62,7 @@ class GeminiOrchestrator:
 
         # 1. Ingest file and build knowledge base
         ingest_res = await self.pipeline.ingest_file(
-            str(path), llm_model="gemini-3.5-flash-lite"
+            str(path), llm_model="gemini-3.8-flash"
         )
         logger.info(
             "Gemini Orchestrator: Ingestion done (%d chunks, %d concepts)",
@@ -98,7 +98,7 @@ class GeminiOrchestrator:
 
         extracted = KnowledgeExtractor.extract_from_topic(
             topic=topic,
-            model="gemini-3.5-flash-lite",
+            model="gemini-3.8-flash",
         )
 
         resolved_title = title or extracted.get("course_title") or topic

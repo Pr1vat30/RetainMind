@@ -149,3 +149,23 @@ async def test_pdf_parsing_and_file_ingestion(tmp_path):
     assert res["chunks_count"] >= 1
     assert res["document_id"] == "notes"
     assert res["concepts_count"] == 1
+
+
+def test_clean_and_parse_json_resilience():
+    # 1. Unescaped newline and tabs inside JSON string
+    raw_with_newlines = '{\n  "title": "Machine Learning",\n  "description": "Prima riga\nSeconda riga\tcon tab",\n  "concepts": []\n}'
+    parsed1 = KnowledgeExtractor._clean_and_parse_json(raw_with_newlines)
+    assert parsed1["title"] == "Machine Learning"
+    assert "Prima riga" in parsed1["description"]
+
+    # 2. Trailing commas in arrays and objects
+    raw_with_trailing_commas = '{\n  "title": "Data Science",\n  "tags": ["ml", "ai", ],\n}'
+    parsed2 = KnowledgeExtractor._clean_and_parse_json(raw_with_trailing_commas)
+    assert parsed2["title"] == "Data Science"
+    assert len(parsed2["tags"]) == 2
+
+    # 3. Markdown fenced code block
+    raw_markdown = '```json\n{\n  "title": "Fenced Block"\n}\n```'
+    parsed3 = KnowledgeExtractor._clean_and_parse_json(raw_markdown)
+    assert parsed3["title"] == "Fenced Block"
+

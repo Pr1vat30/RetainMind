@@ -70,7 +70,7 @@ async def handle_get_token(request: web.Request) -> web.Response:
     identity = body.get("participant_identity") or "student_default"
     name = body.get("participant_name") or "Studente"
     course_id = body.get("course_id")
-    if course_id:
+    if course_id and course_id != "direct_test":
         from assessment.courses import CourseManager
 
         CourseManager.set_active_course(course_id)
@@ -105,6 +105,23 @@ async def handle_get_token(request: web.Request) -> web.Response:
                 agents=[api.RoomAgentDispatch(agent_name=config.agent_name, metadata=course_id or "")]
             )
         )
+        if config.livekit_url.startswith(("ws://", "wss://", "http://", "https://")):
+            try:
+                async with api.LiveKitAPI(
+                    url=config.livekit_url,
+                    api_key=config.livekit_api_key,
+                    api_secret=config.livekit_api_secret,
+                ) as lkapi:
+                    await lkapi.agent_dispatch.create_dispatch(
+                        api.CreateAgentDispatchRequest(
+                            agent_name=config.agent_name,
+                            room=room_name,
+                            metadata=course_id or "",
+                        )
+                    )
+                    logger.info("⚡ Dispatched agent %s to room %s (metadata=%s)", config.agent_name, room_name, course_id)
+            except Exception as e:
+                logger.warning("Agent dispatch in handle_get_token fallback: %s", e)
     if course_id:
         token_builder = token_builder.with_metadata(course_id)
 
@@ -122,11 +139,124 @@ async def handle_get_token(request: web.Request) -> web.Response:
     )
 
 
+async def handle_session_warmup(request: web.Request) -> web.Response:
+    """Prewarm an examination session and LiveKit agent upon application launch.
+    
+    1. Pre-resolves or creates the target room for the active course.
+    2. Explicitly dispatches the LiveKit voice agent into the room using AgentDispatchService.
+    3. Issues a prewarmed AccessToken for the student so room joining is instantaneous upon tapping 'Inizia'.
+    """
+    try:
+        body = await request.json() if request.can_read_body else {}
+    except Exception:
+        body = {}
+
+    from assessment.courses import CourseManager
+    CourseManager.ensure_directories()
+    course_id = body.get("course_id") or request.query.get("course_id") or CourseManager.get_active_course_id()
+    if course_id:
+        CourseManager.set_active_course(course_id)
+
+    identity = body.get("participant_identity") or "student_default"
+    name = body.get("participant_name") or "Studente"
+    room_name = body.get("room_name") or f"oral-exam-{course_id or 'default'}-prewarm"
+
+    # Resolve connection URL for client
+    server_url = config.livekit_url
+    if "127.0.0.1" in server_url or "localhost" in server_url:
+        req_host = request.headers.get("Host", "").split(":")[0]
+        if req_host and req_host not in ("127.0.0.1", "localhost", "0.0.0.0"):
+            server_url = server_url.replace("127.0.0.1", req_host).replace(
+                "localhost", req_host
+            )
+
+    # 1. Explicit Agent Dispatch if agent_name is configured
+    dispatched = False
+    if config.agent_name and config.livekit_url.startswith(("ws://", "wss://", "http://", "https://")):
+        try:
+            async with api.LiveKitAPI(
+                url=config.livekit_url,
+                api_key=config.livekit_api_key,
+                api_secret=config.livekit_api_secret,
+            ) as lkapi:
+                await lkapi.agent_dispatch.create_dispatch(
+                    api.CreateAgentDispatchRequest(
+                        agent_name=config.agent_name,
+                        room=room_name,
+                        metadata=course_id or "",
+                    )
+                )
+                dispatched = True
+                logger.info("🔥 Successfully prewarmed and explicitly dispatched agent %s to room %s", config.agent_name, room_name)
+        except Exception as e:
+            logger.warning("Explicit agent dispatch warmup fallback (token config will be used): %s", e)
+
+    # 2. Build prewarmed student token
+    token_builder = (
+        api.AccessToken(config.livekit_api_key, config.livekit_api_secret)
+        .with_identity(identity)
+        .with_name(name)
+        .with_grants(
+            api.VideoGrants(
+                room_join=True,
+                room=room_name,
+                can_publish=True,
+                can_subscribe=True,
+            )
+        )
+    )
+
+    if config.agent_name:
+        token_builder = token_builder.with_room_config(
+            api.RoomConfiguration(
+                agents=[api.RoomAgentDispatch(agent_name=config.agent_name, metadata=course_id or "")]
+            )
+        )
+        if config.livekit_url.startswith(("ws://", "wss://", "http://", "https://")):
+            try:
+                async with api.LiveKitAPI(
+                    url=config.livekit_url,
+                    api_key=config.livekit_api_key,
+                    api_secret=config.livekit_api_secret,
+                ) as lkapi:
+                    await lkapi.agent_dispatch.create_dispatch(
+                        api.CreateAgentDispatchRequest(
+                            agent_name=config.agent_name,
+                            room=room_name,
+                            metadata=course_id or "",
+                        )
+                    )
+                    logger.info("⚡ Dispatched agent %s to room %s (metadata=%s)", config.agent_name, room_name, course_id)
+            except Exception as e:
+                logger.warning("Agent dispatch in handle_get_token fallback: %s", e)
+    if course_id:
+        token_builder = token_builder.with_metadata(course_id)
+
+    participant_token = token_builder.to_jwt()
+
+    return _json_response(
+        {
+            "server_url": server_url,
+            "participant_token": participant_token,
+            "room_name": room_name,
+            "participant_identity": identity,
+            "participant_name": name,
+            "is_prewarmed": True,
+            "dispatched": dispatched,
+            "course_id": course_id,
+        },
+        status=200,
+    )
+
+
 async def handle_session_status(request: web.Request) -> web.Response:
     """Returns current active examination session status and BKT progress."""
     from assessment.courses import CourseManager
 
     course_id = request.query.get("course_id") or request.query.get("id")
+    if not course_id:
+        course_id = CourseManager.get_active_course_id()
+
     if course_id:
         cdir = CourseManager.get_course_dir(course_id)
         service = SessionService(
@@ -137,15 +267,28 @@ async def handle_session_status(request: web.Request) -> web.Response:
     else:
         service = SessionService()
     status_data = service.get_status()
+    if course_id:
+        status_data["course_id"] = course_id
     return _json_response(status_data)
 
 
 async def handle_session_transcript(request: web.Request) -> web.Response:
     """Returns chronological conversation transcript turns for live subtitles and study review."""
-    service = SessionService()
+    from assessment.courses import CourseManager
+
+    course_id = request.query.get("course_id") or request.query.get("id") or CourseManager.get_active_course_id()
     it_param = request.query.get("iteration")
-    course_id = request.query.get("course_id") or request.query.get("id")
     iteration = int(it_param) if it_param and it_param.isdigit() else None
+    if course_id:
+        cdir = CourseManager.get_course_dir(course_id)
+        service = SessionService(
+            state_file_path=cdir / "state.json",
+            plan_file_path=cdir / "plan.json",
+            events_file_path=cdir / "events.jsonl",
+            course_id=course_id,
+        )
+    else:
+        service = SessionService()
     transcript = service.get_conversation_transcript(iteration=iteration, course_id=course_id)
     return _json_response(
         {
@@ -159,11 +302,23 @@ async def handle_session_transcript(request: web.Request) -> web.Response:
 
 async def handle_session_pause(request: web.Request) -> web.Response:
     """Pauses the active examination session."""
-    service = SessionService()
+    from assessment.courses import CourseManager
+
     try:
         body = await request.json() if request.can_read_body else {}
     except Exception:
         body = {}
+    course_id = body.get("course_id") or request.query.get("course_id") or request.query.get("id") or CourseManager.get_active_course_id()
+    if course_id:
+        cdir = CourseManager.get_course_dir(course_id)
+        service = SessionService(
+            state_file_path=cdir / "state.json",
+            plan_file_path=cdir / "plan.json",
+            events_file_path=cdir / "events.jsonl",
+            course_id=course_id,
+        )
+    else:
+        service = SessionService()
     reason = body.get("reason", "Richiesta da app Flutter")
     result = await service.pause(reason=reason)
     return _json_response(result)
@@ -246,15 +401,34 @@ async def handle_session_report(request: web.Request) -> web.Response:
 
 
 async def handle_session_history(request: web.Request) -> web.Response:
-    """Returns history across all iterations."""
-    service = SessionService()
-    history = service.get_history()
-    return _json_response({"history": history})
+    """Returns history across all iterations without duplicates."""
+    from assessment.courses import CourseManager
+
+    course_id = request.query.get("course_id") or request.query.get("id")
+    all_history = CourseManager.get_discussions_history()
+    if course_id:
+        filtered = [h for h in all_history if h.get("id") == course_id or h.get("course_id") == course_id]
+        if filtered:
+            return _json_response({"history": filtered})
+
+    return _json_response({"history": all_history})
 
 
 async def handle_session_compare(request: web.Request) -> web.Response:
     """Compares current iteration with previous iteration performance."""
-    service = SessionService()
+    from assessment.courses import CourseManager
+
+    course_id = request.query.get("course_id") or request.query.get("id") or CourseManager.get_active_course_id()
+    if course_id:
+        cdir = CourseManager.get_course_dir(course_id)
+        service = SessionService(
+            state_file_path=cdir / "state.json",
+            plan_file_path=cdir / "plan.json",
+            events_file_path=cdir / "events.jsonl",
+            course_id=course_id,
+        )
+    else:
+        service = SessionService()
     comp = await service.compare()
     return _json_response(comp)
 
@@ -280,10 +454,10 @@ async def handle_plan(request: web.Request) -> web.Response:
     if (not plan_path or not plan_path.exists()) and (CourseManager.DATA_DIR / "examination_plan.json").exists():
         plan_path = CourseManager.DATA_DIR / "examination_plan.json"
 
-    if not plan_path.exists():
+    if not plan_path or not plan_path.exists():
         return _json_response(
             {"has_plan": False, "message": "Nessun piano didattico trovato."},
-            status=404,
+            status=200,
         )
 
     try:
@@ -625,6 +799,8 @@ def create_app() -> web.Application:
     # LiveKit Token Endpoints (support both /getToken and /api/token)
     app.router.add_post("/getToken", handle_get_token)
     app.router.add_post("/api/token", handle_get_token)
+    app.router.add_post("/api/session/warmup", handle_session_warmup)
+    app.router.add_get("/api/session/warmup", handle_session_warmup)
 
     # Session & Telemetry Endpoints
     app.router.add_get("/api/session/status", handle_session_status)
@@ -655,6 +831,7 @@ def create_app() -> web.Application:
 if __name__ == "__main__":
     import os
 
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
     port = int(os.getenv("PORT", os.getenv("API_PORT", "8000")))
     host = os.getenv("HOST", "0.0.0.0")
     print(f"🚀 Avvio RetainMind REST & Token API Server su http://{host}:{port}")

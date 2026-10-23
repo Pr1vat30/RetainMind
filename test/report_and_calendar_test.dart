@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:retain_mind_def/models/session_models.dart';
-import 'package:retain_mind_def/providers/exam_provider.dart';
-import 'package:retain_mind_def/screens/report_screen.dart';
-import 'package:retain_mind_def/widgets/avatar/grok_avatar.dart';
-import 'package:retain_mind_def/widgets/study_calendar_widget.dart';
+import 'package:retain_mind/models/session_models.dart';
+import 'package:retain_mind/providers/exam_provider.dart';
+import 'package:retain_mind/screens/report_screen.dart';
+import 'package:retain_mind/widgets/avatar/grok_avatar.dart';
+import 'package:retain_mind/widgets/study_calendar_widget.dart';
 
 void main() {
   group('StudyAnalytics calculations tests', () {

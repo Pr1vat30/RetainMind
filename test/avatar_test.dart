@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:retain_mind_def/widgets/avatar/avatar_math.dart';
-import 'package:retain_mind_def/widgets/avatar/avatar_models.dart';
-import 'package:retain_mind_def/widgets/avatar/grok_avatar.dart';
+import 'package:retain_mind/widgets/avatar/avatar_math.dart';
+import 'package:retain_mind/widgets/avatar/avatar_models.dart';
+import 'package:retain_mind/widgets/avatar/grok_avatar.dart';
 
 void main() {
   group('Avatar math & model tests', () {

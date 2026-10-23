@@ -1,4 +1,4 @@
-package com.example.retain_mind_def
+package com.example.retain_mind
 
 import io.flutter.embedding.android.FlutterActivity
 

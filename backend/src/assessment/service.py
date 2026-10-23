@@ -122,12 +122,32 @@ class SessionService:
                 d.get("concept_id") if isinstance(d, dict) else str(d)
                 for d in plan_data.get("deferred_queue", [])
             ]
+
+            # Resolve pure academic question for current concept (without conversational chatter)
+            curr_cid = state_data.get("current_concept_id")
+            items = plan_data.get("items") or {}
+            curr_question = ""
+            if curr_cid and curr_cid in items:
+                curr_question = items[curr_cid].get("planned_question", {}).get("main_question", "")
+            if not curr_question and self.plan_file_path.exists():
+                try:
+                    p_data = json.loads(self.plan_file_path.read_text(encoding="utf-8"))
+                    p_items = p_data.get("items") or {}
+                    if curr_cid and curr_cid in p_items:
+                        curr_question = p_items[curr_cid].get("planned_question", {}).get("main_question", "")
+                    elif not curr_cid and p_data.get("concept_order"):
+                        first_cid = p_data["concept_order"][0]
+                        curr_question = p_items.get(first_cid, {}).get("planned_question", {}).get("main_question", "")
+                except Exception:
+                    pass
+
             return {
                 "has_active_session": True,
                 "student_id": state_data.get("student_id", "student_default"),
                 "status": state_data.get("status", "ACTIVE"),
                 "current_iteration": state_data.get("current_iteration", 1),
                 "current_concept_id": state_data.get("current_concept_id"),
+                "current_question": curr_question,
                 "pedagogical_state": state_data.get("current_pedagogical_state", "EXPLORATION"),
                 "turns_in_current_iteration": len(state_data.get("history", [])),
                 "total_iterations_completed": len(state_data.get("iterations_history", [])),
@@ -154,12 +174,23 @@ class SessionService:
                 else 0
             )
 
+            curr_q_fallback = ""
+            if manager.examination_plan and manager.current_concept_id:
+                item = manager.examination_plan.items.get(manager.current_concept_id)
+                if item and hasattr(item, "planned_question") and hasattr(item.planned_question, "main_question"):
+                    curr_q_fallback = item.planned_question.main_question
+            elif manager.examination_plan and manager.examination_plan.current_item:
+                item = manager.examination_plan.current_item
+                if hasattr(item, "planned_question") and hasattr(item.planned_question, "main_question"):
+                    curr_q_fallback = item.planned_question.main_question
+
             return {
                 "has_active_session": True,
                 "student_id": manager.student_id,
                 "status": manager.status.value,
                 "current_iteration": manager.current_iteration,
                 "current_concept_id": manager.current_concept_id,
+                "current_question": curr_q_fallback,
                 "pedagogical_state": manager.current_pedagogical_state.value,
                 "turns_in_current_iteration": len(manager.history),
                 "total_iterations_completed": len(manager.iterations_history),
@@ -238,6 +269,13 @@ class SessionService:
         manager = self._load_manager()
         history_list: list[dict[str, Any]] = []
 
+        cid = (
+            self.course_id
+            or (manager.examination_plan.document_id if manager.examination_plan and manager.examination_plan.document_id else None)
+            or (self.state_file_path.parent.name if self.state_file_path.parent.name not in ("data", "backend") else None)
+            or "default"
+        )
+
         for it in manager.iterations_history:
             turns = it.get("history", [])
             ts = it.get("timestamp") or (
@@ -251,6 +289,8 @@ class SessionService:
             )
             history_list.append(
                 {
+                    "id": cid,
+                    "course_id": cid,
                     "iteration": it_num,
                     "status": "COMPLETED",
                     "is_current": False,
@@ -309,12 +349,12 @@ class SessionService:
             )
             curr_concepts = []
             if manager.examination_plan:
-                for cid in manager.examination_plan.concept_order:
-                    if cid in manager.examination_plan.items:
-                        it_obj = manager.examination_plan.items[cid]
+                for co_id in manager.examination_plan.concept_order:
+                    if co_id in manager.examination_plan.items:
+                        it_obj = manager.examination_plan.items[co_id]
                         curr_concepts.append(
                             {
-                                "concept_id": cid,
+                                "concept_id": co_id,
                                 "concept_name": it_obj.concept_name,
                                 "difficulty": getattr(it_obj, "difficulty", 1.0),
                                 "main_question": (
@@ -330,6 +370,8 @@ class SessionService:
 
             history_list.append(
                 {
+                    "id": cid,
+                    "course_id": cid,
                     "iteration": manager.current_iteration,
                     "status": manager.status.value,
                     "is_current": True,

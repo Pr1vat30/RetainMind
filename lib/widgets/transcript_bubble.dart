@@ -9,6 +9,7 @@ class TranscriptBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final isAssistant = turn.role.toLowerCase() == 'assistant' ||
         turn.role.toLowerCase() == 'examiner';
     final studentClean = turn.studentResponse.trim();
@@ -25,14 +26,14 @@ class TranscriptBubble extends StatelessWidget {
 
     final hasBoth = turn.aiQuestion.isNotEmpty && !isStudentSilence;
 
-    Color outcomeColor = AppConstants.textSecondary;
+    Color outcomeColor = colors.textSecondary;
     if (turn.evaluationOutcome.toUpperCase() == 'ACCURATE') {
-      outcomeColor = AppConstants.success;
+      outcomeColor = colors.success;
     } else if (turn.evaluationOutcome.toUpperCase() == 'PARTIAL') {
-      outcomeColor = AppConstants.warning;
+      outcomeColor = colors.warning;
     } else if (turn.evaluationOutcome.toUpperCase().contains('MISCONCEPTION') ||
         turn.evaluationOutcome.toUpperCase().contains('INCORRECT')) {
-      outcomeColor = AppConstants.error;
+      outcomeColor = colors.error;
     }
 
     if (hasBoth) {
@@ -40,10 +41,10 @@ class TranscriptBubble extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppConstants.surfaceCard,
+          color: colors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(AppConstants.radiusMd),
           border: Border.all(
-            color: AppConstants.outlineCard,
+            color: colors.outlineCard,
           ),
         ),
         child: Column(
@@ -54,12 +55,12 @@ class TranscriptBubble extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.forum_outlined, size: 14, color: AppConstants.primaryGlow),
+                    Icon(Icons.forum_outlined, size: 14, color: colors.primaryGlow),
                     const SizedBox(width: 6),
                     Text(
                       'Turno #${turn.turnNumber}${turn.conceptId.isNotEmpty ? " • ${turn.conceptId.replaceAll('_', ' ')}" : ""}',
-                      style: const TextStyle(
-                        color: AppConstants.textSecondary,
+                      style: TextStyle(
+                        color: colors.textSecondary,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
@@ -92,8 +93,8 @@ class TranscriptBubble extends StatelessWidget {
                 Expanded(
                   child: Text(
                     turn.aiQuestion,
-                    style: const TextStyle(
-                      color: AppConstants.primaryGlow,
+                    style: TextStyle(
+                      color: colors.primaryGlow,
                       fontSize: 13,
                       height: 1.35,
                       fontWeight: FontWeight.w500,
@@ -106,7 +107,7 @@ class TranscriptBubble extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppConstants.surfaceElevated,
+                color: colors.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(AppConstants.radiusSm),
               ),
               child: Row(
@@ -116,8 +117,8 @@ class TranscriptBubble extends StatelessWidget {
                   Expanded(
                     child: Text(
                       turn.studentResponse,
-                      style: const TextStyle(
-                        color: AppConstants.textPrimary,
+                      style: TextStyle(
+                        color: colors.textPrimary,
                         fontSize: 13,
                         height: 1.35,
                       ),
@@ -132,8 +133,8 @@ class TranscriptBubble extends StatelessWidget {
                 'ΔPadronanza: ${turn.scoreDelta > 0 ? "+" : ""}${turn.scoreDelta.toStringAsFixed(2)}',
                 style: TextStyle(
                   color: turn.scoreDelta > 0
-                      ? AppConstants.success
-                      : AppConstants.error,
+                      ? colors.success
+                      : colors.error,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
@@ -144,7 +145,7 @@ class TranscriptBubble extends StatelessWidget {
       );
     }
 
-    Color roleColor = isAssistant ? AppConstants.primary : AppConstants.success;
+    Color roleColor = isAssistant ? colors.primary : colors.success;
     String roleLabel = isAssistant ? '👨‍🏫 Docente AI' : '🎓 Studente';
 
     return Container(
@@ -152,13 +153,13 @@ class TranscriptBubble extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: isAssistant
-            ? AppConstants.surfaceCard
-            : AppConstants.surfaceElevated,
+            ? colors.surfaceContainerLow
+            : colors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(AppConstants.radiusMd),
         border: Border.all(
           color: isAssistant
-              ? AppConstants.outlineCard
-              : AppConstants.outline,
+              ? colors.outlineCard
+              : colors.outlineVariant,
         ),
       ),
       child: Column(
@@ -196,8 +197,8 @@ class TranscriptBubble extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             turn.content,
-            style: const TextStyle(
-              color: AppConstants.textPrimary,
+            style: TextStyle(
+              color: colors.textPrimary,
               fontSize: 13.5,
               height: 1.35,
             ),
@@ -208,8 +209,8 @@ class TranscriptBubble extends StatelessWidget {
               'ΔMastery: ${turn.scoreDelta > 0 ? "+" : ""}${turn.scoreDelta.toStringAsFixed(2)}',
               style: TextStyle(
                 color: turn.scoreDelta > 0
-                    ? AppConstants.success
-                    : AppConstants.error,
+                    ? colors.success
+                    : colors.error,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),

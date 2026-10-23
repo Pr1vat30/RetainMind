@@ -1,11 +1,20 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/session_models.dart';
 
 class ApiService {
   String baseUrl;
 
+  /// Persistent HTTP client — reuses TCP connections across requests.
+  /// This reduces per-request overhead from ~100ms (new TCP handshake) to ~5ms
+  /// on the polling hot-path (every 2 seconds during exam session).
+  final http.Client _client = http.Client();
+
   ApiService({required this.baseUrl});
+
+  /// Must be called when the service is no longer needed to free socket resources.
+  void close() => _client.close();
 
   void updateBaseUrl(String newUrl) {
     baseUrl = newUrl.endsWith('/') ? newUrl.substring(0, newUrl.length - 1) : newUrl;
@@ -14,7 +23,7 @@ class ApiService {
   Future<bool> checkHealth() async {
     // 1. Try current configured baseUrl fast
     try {
-      final response = await http
+      final response = await _client
           .get(Uri.parse('$baseUrl/health'))
           .timeout(const Duration(milliseconds: 2000));
       if (response.statusCode == 200) return true;
@@ -32,7 +41,7 @@ class ApiService {
       final results = await Future.wait(
         candidates.map((candidate) async {
           try {
-            final res = await http
+            final res = await _client
                 .get(Uri.parse('$candidate/health'))
                 .timeout(const Duration(milliseconds: 2500));
             if (res.statusCode == 200) {
@@ -72,7 +81,7 @@ class ApiService {
       payload['course_id'] = courseId;
     }
 
-    final response = await http
+    final response = await _client
         .post(
           Uri.parse('$baseUrl/api/token'),
           headers: {'Content-Type': 'application/json'},
@@ -88,9 +97,38 @@ class ApiService {
     }
   }
 
-  Future<SessionStatusInfo> fetchSessionStatus() async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/api/session/status'))
+  /// Proactively prewarm LiveKit room and agent connection upon app start.
+  Future<TokenResponse?> warmupSession({String? courseId}) async {
+    try {
+      final payload = <String, dynamic>{};
+      if (courseId != null && courseId.isNotEmpty) {
+        payload['course_id'] = courseId;
+      }
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/session/warmup'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 4));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        return TokenResponse.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('LiveKit session warmup skipped: $e');
+    }
+    return null;
+  }
+
+  Future<SessionStatusInfo> fetchSessionStatus({String? courseId}) async {
+    final uri = courseId != null && courseId.isNotEmpty
+        ? Uri.parse('$baseUrl/api/session/status?course_id=$courseId')
+        : Uri.parse('$baseUrl/api/session/status');
+    final response = await _client
+        .get(uri)
         .timeout(const Duration(seconds: 5));
 
     if (response.statusCode == 200) {
@@ -122,7 +160,7 @@ class ApiService {
       uri = Uri.parse('$baseUrl/api/session/transcript');
     }
 
-    final response = await http.get(uri).timeout(const Duration(seconds: 5));
+    final response = await _client.get(uri).timeout(const Duration(seconds: 5));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
@@ -152,12 +190,16 @@ class ApiService {
     }
   }
 
-  Future<bool> pauseSession({String reason = 'Pausa da app mobile'}) async {
+  Future<bool> pauseSession({String reason = 'Pausa da app mobile', String? courseId}) async {
+    final payload = <String, dynamic>{'reason': reason};
+    if (courseId != null && courseId.isNotEmpty) {
+      payload['course_id'] = courseId;
+    }
     final response = await http
         .post(
           Uri.parse('$baseUrl/api/session/pause'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'reason': reason}),
+          body: jsonEncode(payload),
         )
         .timeout(const Duration(seconds: 5));
 
@@ -230,9 +272,12 @@ class ApiService {
     }
   }
 
-  Future<DiagnosticReport?> fetchDiagnosticReport() async {
+  Future<DiagnosticReport?> fetchDiagnosticReport({String? courseId}) async {
+    final uri = courseId != null && courseId.isNotEmpty
+        ? Uri.parse('$baseUrl/api/session/report?course_id=$courseId')
+        : Uri.parse('$baseUrl/api/session/report');
     final response = await http
-        .get(Uri.parse('$baseUrl/api/session/report'))
+        .get(uri)
         .timeout(const Duration(seconds: 8));
 
     if (response.statusCode == 200) {
@@ -257,10 +302,13 @@ class ApiService {
     return null;
   }
 
-  Future<ComparisonReportModel?> fetchComparison() async {
+  Future<ComparisonReportModel?> fetchComparison({String? courseId}) async {
     try {
+      final uri = courseId != null && courseId.isNotEmpty
+          ? Uri.parse('$baseUrl/api/session/compare?course_id=$courseId')
+          : Uri.parse('$baseUrl/api/session/compare');
       final response = await http
-          .get(Uri.parse('$baseUrl/api/session/compare'))
+          .get(uri)
           .timeout(const Duration(seconds: 6));
 
       if (response.statusCode == 200) {
@@ -271,10 +319,13 @@ class ApiService {
     return null;
   }
 
-  Future<List<Map<String, dynamic>>> fetchHistory() async {
+  Future<List<Map<String, dynamic>>> fetchHistory({String? courseId}) async {
     try {
+      final uri = courseId != null && courseId.isNotEmpty
+          ? Uri.parse('$baseUrl/api/session/history?course_id=$courseId')
+          : Uri.parse('$baseUrl/api/session/history');
       final response = await http
-          .get(Uri.parse('$baseUrl/api/session/history'))
+          .get(uri)
           .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {

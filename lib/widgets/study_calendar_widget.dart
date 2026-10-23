@@ -219,6 +219,7 @@ class StudyCalendarCard extends StatefulWidget {
 }
 
 class _StudyCalendarCardState extends State<StudyCalendarCard> {
+  AppColors get colors => context.colors;
   late DateTime _viewMonth;
   late DateTime _selectedDay;
 
@@ -325,9 +326,9 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppConstants.surfaceContainerLow,
+        color: colors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppConstants.radiusCard),
-        border: Border.all(color: AppConstants.outlineCard),
+        border: Border.all(color: colors.outlineCard),
       ),
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -343,12 +344,12 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppConstants.primaryContainer.withValues(alpha: 0.15),
+                        color: colors.primaryContainer.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.calendar_month_rounded,
-                        color: AppConstants.primaryContainer,
+                        color: colors.primaryContainer,
                         size: 20,
                       ),
                     ),
@@ -357,10 +358,10 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Calendario Sessioni',
                             style: TextStyle(
-                              color: AppConstants.textPrimary,
+                              color: colors.textPrimary,
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                               letterSpacing: -0.2,
@@ -368,8 +369,8 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
                           ),
                           Text(
                             monthLabel,
-                            style: const TextStyle(
-                              color: AppConstants.primary,
+                            style: TextStyle(
+                              color: colors.primary,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w600,
                             ),
@@ -391,14 +392,14 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         margin: const EdgeInsets.only(right: 6),
                         decoration: BoxDecoration(
-                          color: AppConstants.surfaceContainerHigh,
+                          color: colors.surfaceContainerHigh,
                           borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                          border: Border.all(color: AppConstants.outlineCard),
+                          border: Border.all(color: colors.outlineCard),
                         ),
-                        child: const Text(
+                        child: Text(
                           'Oggi',
                           style: TextStyle(
-                            color: AppConstants.textPrimary,
+                            color: colors.textPrimary,
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
@@ -406,14 +407,14 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
                       ),
                     ),
                   IconButton(
-                    icon: const Icon(Icons.chevron_left_rounded, color: AppConstants.textSecondary, size: 22),
+                    icon: Icon(Icons.chevron_left_rounded, color: colors.textSecondary, size: 22),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     onPressed: _previousMonth,
                     tooltip: 'Mese precedente',
                   ),
                   IconButton(
-                    icon: const Icon(Icons.chevron_right_rounded, color: AppConstants.textSecondary, size: 22),
+                    icon: Icon(Icons.chevron_right_rounded, color: colors.textSecondary, size: 22),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     onPressed: _nextMonth,
@@ -436,8 +437,8 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
                     lbl,
                     style: TextStyle(
                       color: isWeekend
-                          ? AppConstants.textSecondary.withValues(alpha: 0.6)
-                          : AppConstants.textSecondary,
+                          ? colors.textSecondary.withValues(alpha: 0.6)
+                          : colors.textSecondary,
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.5,
@@ -449,7 +450,7 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
           ),
 
           const SizedBox(height: 8),
-          const Divider(color: AppConstants.outline, height: 1),
+          Divider(color: colors.outline, height: 1),
           const SizedBox(height: 8),
 
           // Days Grid
@@ -491,18 +492,18 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
                               margin: const EdgeInsets.all(2),
                               decoration: BoxDecoration(
                                 color: isSelected
-                                    ? AppConstants.primaryContainer
+                                    ? colors.primaryContainer
                                     : (hasSession
-                                        ? AppConstants.primaryContainer.withValues(alpha: 0.20)
+                                        ? colors.primaryContainer.withValues(alpha: 0.20)
                                         : Colors.transparent),
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
                                   color: isSelected
-                                      ? AppConstants.primaryGlow
+                                      ? colors.primaryGlow
                                       : (isTodayDay
-                                          ? AppConstants.primary.withValues(alpha: 0.6)
+                                          ? colors.primary.withValues(alpha: 0.6)
                                           : (hasSession
-                                              ? AppConstants.primaryContainer.withValues(alpha: 0.45)
+                                              ? colors.primaryContainer.withValues(alpha: 0.45)
                                               : Colors.transparent)),
                                   width: isSelected || isTodayDay ? 1.5 : 1,
                                 ),
@@ -514,12 +515,12 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
                                     '$dayNumber',
                                     style: TextStyle(
                                       color: isSelected
-                                          ? AppConstants.onPrimaryContainer
+                                          ? colors.onPrimaryContainer
                                           : (hasSession
-                                              ? AppConstants.primaryGlow
+                                              ? colors.primaryGlow
                                               : (isTodayDay
-                                                  ? AppConstants.textPrimary
-                                                  : AppConstants.textSecondary)),
+                                                  ? colors.textPrimary
+                                                  : colors.textSecondary)),
                                       fontSize: 12.5,
                                       fontWeight: isSelected || hasSession || isTodayDay
                                           ? FontWeight.w700
@@ -533,7 +534,7 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
                                         width: sessionsCount > 1 ? 12 : 4.5,
                                         height: 4.5,
                                         decoration: BoxDecoration(
-                                          color: AppConstants.primaryContainer,
+                                          color: colors.primaryContainer,
                                           borderRadius: BorderRadius.circular(3),
                                         ),
                                       ),
@@ -558,19 +559,19 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _buildLegendDot(
-                color: AppConstants.primaryContainer,
+                color: colors.primaryContainer,
                 label: 'Sessione svolta',
               ),
               const SizedBox(width: 16),
               _buildLegendOutline(
-                borderColor: AppConstants.primary.withValues(alpha: 0.8),
+                borderColor: colors.primary.withValues(alpha: 0.8),
                 label: 'Oggi',
               ),
             ],
           ),
 
           const SizedBox(height: 14),
-          const Divider(color: AppConstants.outline, height: 1),
+          Divider(color: colors.outline, height: 1),
           const SizedBox(height: 14),
 
           // Daily Detail Card for Selected Date
@@ -596,7 +597,7 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
         const SizedBox(width: 6),
         Text(
           label,
-          style: const TextStyle(color: AppConstants.textSecondary, fontSize: 11),
+          style: TextStyle(color: colors.textSecondary, fontSize: 11),
         ),
       ],
     );
@@ -617,7 +618,7 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
         const SizedBox(width: 6),
         Text(
           label,
-          style: const TextStyle(color: AppConstants.textSecondary, fontSize: 11),
+          style: TextStyle(color: colors.textSecondary, fontSize: 11),
         ),
       ],
     );
@@ -654,13 +655,13 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: hasActivity
-            ? AppConstants.surfaceContainerHigh.withValues(alpha: 0.7)
-            : AppConstants.surfaceContainerLowest,
+            ? colors.surfaceContainerHigh.withValues(alpha: 0.7)
+            : colors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(AppConstants.radiusSm),
         border: Border.all(
           color: hasActivity
-              ? AppConstants.primaryContainer.withValues(alpha: 0.3)
-              : AppConstants.outlineCard,
+              ? colors.primaryContainer.withValues(alpha: 0.3)
+              : colors.outlineCard,
         ),
       ),
       child: Column(
@@ -672,8 +673,8 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
               Expanded(
                 child: Text(
                   formattedDate,
-                  style: const TextStyle(
-                    color: AppConstants.textPrimary,
+                  style: TextStyle(
+                    color: colors.textPrimary,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -683,14 +684,14 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: hasActivity
-                      ? AppConstants.success.withValues(alpha: 0.16)
-                      : AppConstants.surfaceContainerHighest,
+                      ? colors.success.withValues(alpha: 0.16)
+                      : colors.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                 ),
                 child: Text(
                   hasActivity ? '${sessions.length} sessioni' : 'Nessuna attività',
                   style: TextStyle(
-                    color: hasActivity ? AppConstants.success : AppConstants.textTertiary,
+                    color: hasActivity ? colors.success : colors.textTertiary,
                     fontSize: 10.5,
                     fontWeight: FontWeight.bold,
                   ),
@@ -723,8 +724,8 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
               const SizedBox(height: 8),
               Text(
                 'Argomenti affrontati: ${subjects.join(', ')}',
-                style: const TextStyle(
-                  color: AppConstants.textSecondary,
+                style: TextStyle(
+                  color: colors.textSecondary,
                   fontSize: 11.5,
                   height: 1.3,
                 ),
@@ -733,10 +734,10 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
               ),
             ],
           ] else ...[
-            const Text(
+            Text(
               'Nessuna simulazione vocale completata in questa giornata.\nConsulta gli altri giorni evidenziati sul calendario per analizzare il ritmo di studio.',
               style: TextStyle(
-                color: AppConstants.textSecondary,
+                color: colors.textSecondary,
                 fontSize: 11.5,
                 height: 1.35,
               ),
@@ -751,12 +752,12 @@ class _StudyCalendarCardState extends State<StudyCalendarCard> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 13, color: AppConstants.primary),
+        Icon(icon, size: 13, color: colors.primary),
         const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(
-            color: AppConstants.textPrimary,
+          style: TextStyle(
+            color: colors.textPrimary,
             fontSize: 11.5,
             fontWeight: FontWeight.w600,
           ),
@@ -774,13 +775,14 @@ class StudyStreakCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppConstants.surfaceContainerLow,
+        color: colors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppConstants.radiusCard),
-        border: Border.all(color: AppConstants.outlineCard),
+        border: Border.all(color: colors.outlineCard),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -805,12 +807,12 @@ class StudyStreakCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Costanza di Studio',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: AppConstants.textPrimary,
+                        color: colors.textPrimary,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                       ),
@@ -821,8 +823,8 @@ class StudyStreakCard extends StatelessWidget {
                           : 'Fai una sessione per avviare la serie',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppConstants.textSecondary,
+                      style: TextStyle(
+                        color: colors.textSecondary,
                         fontSize: 11.5,
                       ),
                     ),
@@ -834,7 +836,7 @@ class StudyStreakCard extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: (analytics.currentStreak > 0 ? const Color(0xFFF97316) : AppConstants.surfaceContainerHighest)
+                    color: (analytics.currentStreak > 0 ? const Color(0xFFF97316) : colors.surfaceContainerHighest)
                         .withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(AppConstants.radiusPill),
                   ),
@@ -843,7 +845,7 @@ class StudyStreakCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: analytics.currentStreak > 0 ? const Color(0xFFFB923C) : AppConstants.textTertiary,
+                      color: analytics.currentStreak > 0 ? const Color(0xFFFB923C) : colors.textTertiary,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -862,7 +864,7 @@ class StudyStreakCard extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
-                    color: AppConstants.surfaceContainerHigh,
+                    color: colors.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(AppConstants.radiusSm),
                   ),
                   child: Column(
@@ -874,21 +876,21 @@ class StudyStreakCard extends StatelessWidget {
                         children: [
                           Text(
                             '${analytics.currentStreak}',
-                            style: const TextStyle(
-                              color: AppConstants.textPrimary,
+                            style: TextStyle(
+                              color: colors.textPrimary,
                               fontSize: 24,
                               fontWeight: FontWeight.w800,
                               letterSpacing: -0.5,
                             ),
                           ),
                           const SizedBox(width: 6),
-                          const Flexible(
+                          Flexible(
                             child: Text(
                               'giorni di fila',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: AppConstants.textSecondary,
+                                color: colors.textSecondary,
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -897,9 +899,9 @@ class StudyStreakCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 2),
-                      const Text(
+                      Text(
                         'Serie attiva attuale',
-                        style: TextStyle(color: AppConstants.textTertiary, fontSize: 10.5),
+                        style: TextStyle(color: colors.textTertiary, fontSize: 10.5),
                       ),
                     ],
                   ),
@@ -910,7 +912,7 @@ class StudyStreakCard extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
-                    color: AppConstants.surfaceContainerHigh,
+                    color: colors.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(AppConstants.radiusSm),
                   ),
                   child: Column(
@@ -922,21 +924,21 @@ class StudyStreakCard extends StatelessWidget {
                         children: [
                           Text(
                             '${analytics.activeDaysCount}',
-                            style: const TextStyle(
-                              color: AppConstants.primary,
+                            style: TextStyle(
+                              color: colors.primary,
                               fontSize: 24,
                               fontWeight: FontWeight.w800,
                               letterSpacing: -0.5,
                             ),
                           ),
                           const SizedBox(width: 6),
-                          const Flexible(
+                          Flexible(
                             child: Text(
                               'giorni totali',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: AppConstants.textSecondary,
+                                color: colors.textSecondary,
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -945,9 +947,9 @@ class StudyStreakCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 2),
-                      const Text(
+                      Text(
                         'Giorni di studio registrati',
-                        style: TextStyle(color: AppConstants.textTertiary, fontSize: 10.5),
+                        style: TextStyle(color: colors.textTertiary, fontSize: 10.5),
                       ),
                     ],
                   ),
@@ -969,13 +971,14 @@ class StudyHabitsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Abitudini & Volume di Apprendimento',
           style: TextStyle(
-            color: AppConstants.textPrimary,
+            color: colors.textPrimary,
             fontSize: 15,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.2,
@@ -986,8 +989,9 @@ class StudyHabitsGrid extends StatelessWidget {
           children: [
             Expanded(
               child: _buildMetricTile(
+                colors: colors,
                 icon: Icons.forum_rounded,
-                iconColor: AppConstants.primaryContainer,
+                iconColor: colors.primaryContainer,
                 title: '${analytics.totalTurns}',
                 subtitle: 'Scambi vocali totali',
                 caption: 'Volume dialogo AI',
@@ -996,8 +1000,9 @@ class StudyHabitsGrid extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: _buildMetricTile(
+                colors: colors,
                 icon: Icons.psychology_rounded,
-                iconColor: AppConstants.secondary,
+                iconColor: colors.secondary,
                 title: analytics.averageTurnsPerSession.toStringAsFixed(1),
                 subtitle: 'Scambi medi / sessione',
                 caption: 'Profondità media',
@@ -1010,8 +1015,9 @@ class StudyHabitsGrid extends StatelessWidget {
           children: [
             Expanded(
               child: _buildMetricTile(
+                colors: colors,
                 icon: Icons.school_rounded,
-                iconColor: AppConstants.success,
+                iconColor: colors.success,
                 title: '${analytics.totalSessions}',
                 subtitle: 'Sessioni complessive',
                 caption: 'Totale simulazioni',
@@ -1020,6 +1026,7 @@ class StudyHabitsGrid extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: _buildMetricTile(
+                colors: colors,
                 icon: analytics.peakHourIcon,
                 iconColor: const Color(0xFFFBBF24),
                 title: analytics.peakHourLabel.split('(').first.trim(),
@@ -1037,6 +1044,7 @@ class StudyHabitsGrid extends StatelessWidget {
   }
 
   Widget _buildMetricTile({
+    required AppColors colors,
     required IconData icon,
     required Color iconColor,
     required String title,
@@ -1047,9 +1055,9 @@ class StudyHabitsGrid extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppConstants.surfaceContainerLow,
+        color: colors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppConstants.radiusSm),
-        border: Border.all(color: AppConstants.outlineCard),
+        border: Border.all(color: colors.outlineCard),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1071,8 +1079,8 @@ class StudyHabitsGrid extends StatelessWidget {
                   caption,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppConstants.textTertiary,
+                  style: TextStyle(
+                    color: colors.textTertiary,
                     fontSize: 10,
                   ),
                 ),
@@ -1083,7 +1091,7 @@ class StudyHabitsGrid extends StatelessWidget {
           Text(
             title,
             style: TextStyle(
-              color: AppConstants.textPrimary,
+              color: colors.textPrimary,
               fontSize: isCompactTitle ? 15 : 20,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.3,
@@ -1094,8 +1102,8 @@ class StudyHabitsGrid extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             subtitle,
-            style: const TextStyle(
-              color: AppConstants.textSecondary,
+            style: TextStyle(
+              color: colors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w500,
             ),
@@ -1118,31 +1126,32 @@ class WeeklyStudyRhythmCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final maxCount = max(analytics.weekdayMax, 1);
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppConstants.surfaceContainerLow,
+        color: colors.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppConstants.radiusCard),
-        border: Border.all(color: AppConstants.outlineCard),
+        border: Border.all(color: colors.outlineCard),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.bar_chart_rounded, color: AppConstants.primary, size: 20),
+              Icon(Icons.bar_chart_rounded, color: colors.primary, size: 20),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 flex: 3,
                 child: Text(
                   'Ritmo Settimanale di Studio',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: AppConstants.textPrimary,
+                    color: colors.textPrimary,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1157,7 +1166,7 @@ class WeeklyStudyRhythmCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.end,
                   style: TextStyle(
-                    color: AppConstants.textSecondary.withValues(alpha: 0.8),
+                    color: colors.textSecondary.withValues(alpha: 0.8),
                     fontSize: 11,
                   ),
                 ),
@@ -1185,7 +1194,7 @@ class WeeklyStudyRhythmCard extends StatelessWidget {
                       Text(
                         count > 0 ? '$count' : '',
                         style: TextStyle(
-                          color: isMax ? AppConstants.primaryGlow : AppConstants.textSecondary,
+                          color: isMax ? colors.primaryGlow : colors.textSecondary,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1202,15 +1211,15 @@ class WeeklyStudyRhythmCard extends StatelessWidget {
                               begin: Alignment.bottomCenter,
                               end: Alignment.topCenter,
                               colors: isMax
-                                  ? [AppConstants.primaryContainer, AppConstants.primaryGlow]
+                                  ? [colors.primaryContainer, colors.primaryGlow]
                                   : (count > 0
                                       ? [
-                                          AppConstants.surfaceContainerHigh,
-                                          AppConstants.primaryContainer.withValues(alpha: 0.6)
+                                          colors.surfaceContainerHigh,
+                                          colors.primaryContainer.withValues(alpha: 0.6)
                                         ]
                                       : [
-                                          AppConstants.surfaceContainerLowest,
-                                          AppConstants.surfaceContainerHigh.withValues(alpha: 0.5)
+                                          colors.surfaceContainerLowest,
+                                          colors.surfaceContainerHigh.withValues(alpha: 0.5)
                                         ]),
                             ),
                             borderRadius: BorderRadius.circular(6),
@@ -1221,7 +1230,7 @@ class WeeklyStudyRhythmCard extends StatelessWidget {
                       Text(
                         _labels[idx],
                         style: TextStyle(
-                          color: isMax ? AppConstants.primary : AppConstants.textSecondary,
+                          color: isMax ? colors.primary : colors.textSecondary,
                           fontSize: 10.5,
                           fontWeight: isMax ? FontWeight.bold : FontWeight.w500,
                         ),

@@ -9,20 +9,21 @@ class BktProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final progress = (statusInfo?.planProgressPercentage ?? 0.0) / 100.0;
     final concept = statusInfo?.currentConceptId.isNotEmpty == true
         ? statusInfo!.currentConceptId.replaceAll('_', ' ').toUpperCase()
         : 'IN ATTESA';
     final step = statusInfo?.planStep ?? '0/0';
     final fsmState = statusInfo?.pedagogicalState ?? 'EXPLORATION';
-    final stateColor = AppConstants.getPedagogicalColor(fsmState);
+    final stateColor = colors.getPedagogicalColor(fsmState);
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppConstants.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppConstants.surfaceCard),
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppConstants.radiusMd),
+        border: Border.all(color: colors.outlineCard),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -32,12 +33,12 @@ class BktProgressBar extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.school, size: 16, color: AppConstants.textSecondary),
+                  Icon(Icons.school, size: 16, color: colors.textSecondary),
                   const SizedBox(width: 6),
                   Text(
                     'Argomento: $concept',
-                    style: const TextStyle(
-                      color: AppConstants.textPrimary,
+                    style: TextStyle(
+                      color: colors.textPrimary,
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
@@ -68,8 +69,8 @@ class BktProgressBar extends StatelessWidget {
             child: LinearProgressIndicator(
               value: progress.clamp(0.0, 1.0),
               minHeight: 8,
-              backgroundColor: AppConstants.surfaceCard,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppConstants.primary),
+              backgroundColor: colors.surfaceContainerHigh,
+              valueColor: AlwaysStoppedAnimation<Color>(colors.primaryContainer),
             ),
           ),
           const SizedBox(height: 8),
@@ -78,15 +79,15 @@ class BktProgressBar extends StatelessWidget {
             children: [
               Text(
                 'Progresso esame: ${(progress * 100).toStringAsFixed(1)}%',
-                style: const TextStyle(
-                  color: AppConstants.textSecondary,
+                style: TextStyle(
+                  color: colors.textSecondary,
                   fontSize: 11.5,
                 ),
               ),
               Text(
                 'Passo $step',
-                style: const TextStyle(
-                  color: AppConstants.textSecondary,
+                style: TextStyle(
+                  color: colors.textSecondary,
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
                 ),

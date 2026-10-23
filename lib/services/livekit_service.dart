@@ -1,3 +1,5 @@
+// ignore_for_file: experimental_member_use
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -15,7 +17,36 @@ enum SpeakingStateEnum {
   idle,
   aiSpeaking,
   studentSpeaking,
+  /// Agent is processing / generating a response (LLM latency window).
+  /// Use this to show a subtle "thinking" cue without stopping animations.
+  thinking,
 }
+
+/// Profilo audio ad alta fedeltà con cancellazione hardware dell'eco (AEC Full-Duplex) e routing vivavoce
+/// - Apple: category: playAndRecord, mode: videoChat (loudspeaker a piena frequenza 48kHz con DSP hardware Voice Processing I/O)
+/// - Android: audioMode: inCommunication (indispensabile per attivare l'Acoustic Echo Cancellation hardware HAL ed evitare
+///   che la voce dell'AI rientri nel microfono mandando in loop Gemini Live) + vivavoce forzato.
+const kNaturalVoiceAudioOptions = AudioSessionOptions.communication(
+  apple: AppleAudioSessionConfiguration(
+    category: AppleAudioCategory.playAndRecord,
+    categoryOptions: {
+      AppleAudioCategoryOption.defaultToSpeaker,
+      AppleAudioCategoryOption.allowBluetooth,
+      AppleAudioCategoryOption.allowBluetoothA2DP,
+      AppleAudioCategoryOption.allowAirPlay,
+    },
+    mode: AppleAudioMode.videoChat,
+  ),
+  android: AndroidAudioSessionConfiguration(
+    audioMode: AndroidAudioMode.inCommunication,
+    manageAudioFocus: true,
+    focusMode: AndroidAudioFocusMode.gain,
+    streamType: AndroidAudioStreamType.voiceCall,
+    usageType: AndroidAudioAttributesUsageType.voiceCommunication,
+    contentType: AndroidAudioAttributesContentType.speech,
+    forceAudioRouting: true,
+  ),
+);
 
 class LiveKitService {
   Room? _room;
@@ -66,13 +97,26 @@ class LiveKitService {
         throw Exception('Permesso microfono non concesso');
       }
 
+      if (!kIsWeb) {
+        try {
+          // Configure AudioSessionOptions with high-fidelity communication profile
+          // (hardware AEC full-duplex for barge-in + forced loudspeaker).
+          // NOTE: setSpeakerOutputPreferred is intentionally called AFTER mic track publish
+          // to avoid a perceptible audio routing glitch on Samsung Galaxy devices.
+          await AudioManager.instance.setAudioSessionOptions(kNaturalVoiceAudioOptions);
+          // Speaker routing is deferred to after setMicrophoneEnabled() below.
+        } catch (e) {
+          debugPrint('AudioManager setup audio options error: $e');
+        }
+      }
+
       final roomOptions = const RoomOptions(
         adaptiveStream: true,
         dynacast: true,
         defaultAudioPublishOptions: AudioPublishOptions(
           name: 'student_audio',
           dtx: false, // Disattivato per eliminare il ritardo di riattivazione pacchetti all'inizio della frase
-          encoding: AudioEncoding.presetSpeech,
+          encoding: AudioEncoding.presetSpeech, // Frame Opus a 20ms ottimizzati per speech e bassissima latenza
         ),
         defaultAudioOutputOptions: AudioOutputOptions(
           speakerOn: true,
@@ -80,8 +124,8 @@ class LiveKitService {
         defaultAudioCaptureOptions: AudioCaptureOptions(
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
-          highPassFilter: false,
+          autoGainControl: true, // Livello microfonico normalizzato per reattività immediata del VAD / endpointing
+          highPassFilter: true, // Filtra frequenze basse (<80Hz) per evitare falsi positivi del VAD
         ),
       );
 
@@ -89,6 +133,13 @@ class LiveKitService {
       _listener = _room!.createListener();
 
       _setupRoomListeners();
+
+      // Pre-warm DNS resolution and TLS handshake (LiveKit Flutter best practice)
+      try {
+        await _room!.prepareConnection(serverUrl, token);
+      } catch (e) {
+        debugPrint('LiveKit prepareConnection non-fatal error: $e');
+      }
 
       await _room!.connect(serverUrl, token);
 
@@ -98,10 +149,11 @@ class LiveKitService {
       _isMicMuted = false;
       _micMutedController.add(false);
 
-      // Prefer high-fidelity loudspeaker output on mobile devices
+      // Defer speaker routing to AFTER mic track publish to avoid audio routing glitch
+      // on Samsung Galaxy / Android devices (routing brusco all'apertura).
       if (!kIsWeb) {
         try {
-          await AudioManager.instance.setSpeakerOutputPreferred(true);
+          await AudioManager.instance.setSpeakerOutputPreferred(true, force: true);
           _isSpeakerphoneOn = true;
         } catch (e) {
           debugPrint('AudioManager setSpeakerOutputPreferred error: $e');
@@ -137,7 +189,25 @@ class LiveKitService {
         _setConnectionState(ConnectionStateEnum.connected);
       })
       ..on<ActiveSpeakersChangedEvent>((event) {
+        // ParticipantAttributesChanged is the authoritative source for the AI agent state.
+        // Only use ActiveSpeakers to detect the LOCAL (student) speaking turn.
+        // This prevents flicker when both events fire simultaneously with conflicting states.
         _updateSpeakingState(event.speakers);
+      })
+      ..on<ParticipantAttributesChanged>((event) {
+        if (event.participant.kind == ParticipantKind.AGENT) {
+          final attrs = AgentAttributes.fromJson(event.attributes);
+          final state = attrs.lkAgentState;
+          if (state == AgentState.speaking) {
+            _setSpeakingState(SpeakingStateEnum.aiSpeaking);
+          } else if (state == AgentState.thinking) {
+            // Agent is processing — keep current state to avoid flicker,
+            // but expose thinking so the avatar can show a subtle cue.
+            _setSpeakingState(SpeakingStateEnum.thinking);
+          } else if (state == AgentState.listening || state == AgentState.idle) {
+            _setSpeakingState(SpeakingStateEnum.idle);
+          }
+        }
       })
       ..on<AudioPlaybackStatusChanged>((event) async {
         debugPrint('LiveKit AudioPlaybackStatusChanged: isPlaying=${event.isPlaying}');
@@ -149,17 +219,16 @@ class LiveKitService {
       })
       ..on<TrackSubscribedEvent>((event) async {
         debugPrint('LiveKit TrackSubscribedEvent: track=${event.track.sid}, kind=${event.track.kind}');
-        if (event.track is AudioTrack && !kIsWeb) {
-          try {
-            await AudioManager.instance.setSpeakerOutputPreferred(_isSpeakerphoneOn);
-          } catch (_) {}
-        }
       });
   }
 
   void _updateSpeakingState(List<Participant> speakers) {
     if (speakers.isEmpty) {
-      _setSpeakingState(SpeakingStateEnum.idle);
+      // Only reset to idle if agent is NOT in a thinking state.
+      // This avoids killing the thinking indicator when audio silence is detected.
+      if (_speakingState != SpeakingStateEnum.thinking) {
+        _setSpeakingState(SpeakingStateEnum.idle);
+      }
       return;
     }
 
@@ -174,12 +243,16 @@ class LiveKitService {
       }
     }
 
+    // Agent audio takes precedence. Only override with ActiveSpeakers for the REMOTE
+    // participant when the agent is NOT already marked as speaking via attributes.
     if (remoteSpeaking) {
       _setSpeakingState(SpeakingStateEnum.aiSpeaking);
     } else if (localSpeaking) {
       _setSpeakingState(SpeakingStateEnum.studentSpeaking);
     } else {
-      _setSpeakingState(SpeakingStateEnum.idle);
+      if (_speakingState != SpeakingStateEnum.thinking) {
+        _setSpeakingState(SpeakingStateEnum.idle);
+      }
     }
   }
 
@@ -200,7 +273,7 @@ class LiveKitService {
       try {
         await AudioManager.instance.setSpeakerOutputPreferred(
           _isSpeakerphoneOn,
-          force: false,
+          force: _isSpeakerphoneOn,
         );
       } catch (e) {
         debugPrint('AudioManager toggleSpeakerphone error: $e');
@@ -235,8 +308,46 @@ class LiveKitService {
     }
   }
 
-  void dispose() {
-    disconnect();
+  /// Waits until the remote AI agent starts speaking its initial audio,
+  /// or until [timeout] elapses as a safety fallback guarantee.
+  ///
+  /// The default timeout is 5000ms (instead of the previous 3500ms) to account
+  /// for LiveKit Cloud agent dispatch latency of up to 2-5 seconds.
+  Future<void> waitForFirstAiInteraction({
+    Duration timeout = const Duration(milliseconds: 5000),
+  }) async {
+    if (_speakingState == SpeakingStateEnum.aiSpeaking) return;
+
+    final completer = Completer<void>();
+    StreamSubscription<SpeakingStateEnum>? sub;
+    Timer? timer;
+
+    void finish() {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    }
+
+    timer = Timer(timeout, finish);
+
+    sub = speakingStateStream.listen((state) {
+      if (state == SpeakingStateEnum.aiSpeaking) {
+        finish();
+      }
+    });
+
+    try {
+      await completer.future;
+    } finally {
+      timer.cancel();
+      await sub.cancel();
+    }
+  }
+
+  Future<void> dispose() async {
+    // Await disconnect before closing stream controllers to avoid
+    // writing to a closed broadcast stream (Unhandled Exception).
+    await disconnect();
     _connectionStateController.close();
     _speakingStateController.close();
     _micMutedController.close();
