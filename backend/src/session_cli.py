@@ -31,7 +31,7 @@ async def cmd_status(service: SessionService, args: argparse.Namespace) -> None:
     print_banner("STATO DELLA SESSIONE D'ESAME")
     if not status.get("has_active_session"):
         print("[INFO] Nessuna sessione d'esame attiva o salvata trovata.")
-        print("       Avvia una sessione vocale con LiveKit per iniziare.")
+        print("       Avvia una sessione vocale Pipecat per iniziare.")
         return
 
     print(f"• ID Studente:          {status.get('student_id')}")

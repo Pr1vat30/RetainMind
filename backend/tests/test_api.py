@@ -15,7 +15,6 @@ async def test_api_health_endpoint(aiohttp_client):
     assert resp.status == 200
     data = await resp.json()
     assert data["status"] == "healthy"
-    assert "livekit_mode" in data
     assert resp.headers.get("Access-Control-Allow-Origin") == "*"
 
 
@@ -37,18 +36,6 @@ async def test_api_token_endpoint(aiohttp_client):
     assert len(data["participant_token"]) > 20
     assert "server_url" in data
     assert resp.headers.get("Access-Control-Allow-Origin") == "*"
-
-
-@pytest.mark.asyncio
-async def test_api_get_token_alias(aiohttp_client):
-    """Verifies that standard LiveKit /getToken endpoint works identically."""
-    app = create_app()
-    client = await aiohttp_client(app)
-    resp = await client.post("/getToken", json={"room_name": "alias-room"})
-    assert resp.status == 201
-    data = await resp.json()
-    assert data["room_name"] == "alias-room"
-    assert "participant_token" in data
 
 
 @pytest.mark.asyncio

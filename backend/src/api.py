@@ -120,7 +120,6 @@ def create_app() -> FastAPI:
             "webrtc_mode": config.webrtc_mode,
             "pipeline_mode": config.pipeline_mode,
             "transports": ["smallwebrtc", "websocket"],
-            "livekit_mode": config.livekit_mode,
         }
 
     # -------------------------------------------------------------------------
@@ -246,7 +245,6 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------------
     # Token / Session Discovery Endpoints (Backward-compatible with Flutter clients)
     # -------------------------------------------------------------------------
-    @app.post("/getToken")
     @app.post("/api/token")
     async def handle_get_token(request: Request):
         """Returns session connection details and endpoints for WebRTC & WebSocket."""

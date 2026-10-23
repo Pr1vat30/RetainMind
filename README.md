@@ -42,7 +42,7 @@ retain_mind/
 │
 └── backend/                          # Backend FastAPI + Pipecat (Python)
     ├── src/
-    │   ├── agent.py                  # Pipeline vocale Pipecat: Gemini Live o pipeline cascaded
+    │   ├── agent.py                  # Pipeline vocale Pipecat: Gemini Live predefinito, cascaded opzionale
     │   ├── api.py                    # API REST, WebSocket Flutter e signaling SmallWebRTC
     │   ├── assessment/               # Valutazione, BKT, FSM, sessioni e store per corso
     │   ├── rag/                      # Neo4j, Qdrant, Knowledge Graph
@@ -68,6 +68,8 @@ cd backend
 ```
 
 `start_agent_cloud.sh` è mantenuto per compatibilità e richiama lo stesso server: non avviare entrambi gli script contemporaneamente.
+
+La modalità vocale predefinita è Gemini Live (`gemini-3.8-live`, voce `Aoede`). Per usare in alternativa la pipeline cascaded STT → LLM → TTS, impostare `AGENT_PIPELINE_MODE=cascaded` in `backend/.env.local`.
 
 Per creare un piano da un argomento, l'app consente di scegliere livello e durata e mostra una revisione della dispensa e degli argomenti generati prima di avviare l'interrogazione. Il modello predefinito di generazione del piano è `gemini-3.5-flash-lite` (`PLAN_GENERATION_MODEL`).
 

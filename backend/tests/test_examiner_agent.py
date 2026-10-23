@@ -328,17 +328,4 @@ async def test_gemini_38_live_structured_tool_responses():
     assert "retryable: false" in resume
 
 
-@pytest.mark.asyncio
-async def test_gemini_live_session_resumption_recovery_logic():
-    """Verify that expired session resumption handles are discarded to prevent 1008 crashes."""
-    from livekit.plugins.google.realtime import realtime_api
-    from google.genai import errors
-
-    # Simulate an expired session error
-    fake_error = errors.APIError(1008, "BidiGenerateContent session not found or expired", None)
-    err_str = str(fake_error)
-    
-    assert "1008" in err_str or "session not found" in err_str.lower() or "expired" in err_str.lower()
-
-
 

@@ -621,7 +621,7 @@ class SessionService:
     ) -> dict[str, Any]:
         """Starts a completely fresh, isolated discussion on the current document plan.
         Archives any existing discussion if it had turns or was active, resets BKT mastery,
-        and generates a clean, unique room name for LiveKit.
+        and generates a clean, unique identifier for the voice session.
         """
         import time
         from assessment.courses import CourseManager

@@ -5,15 +5,15 @@ void main() {
   group('Session models serialization tests', () {
     test('TokenResponse.fromJson parses valid payload', () {
       final json = {
-        'participant_token': 'mock-livekit-jwt',
-        'server_url': 'wss://test.livekit.cloud',
+        'participant_token': 'pipecat-session-token',
+        'server_url': 'http://localhost:8000',
         'room_name': 'oral-exam-test',
         'participant_identity': 'student-123',
         'participant_name': 'Mario Rossi',
       };
       final res = TokenResponse.fromJson(json);
-      expect(res.participantToken, 'mock-livekit-jwt');
-      expect(res.serverUrl, 'wss://test.livekit.cloud');
+      expect(res.participantToken, 'pipecat-session-token');
+      expect(res.serverUrl, 'http://localhost:8000');
       expect(res.roomName, 'oral-exam-test');
       expect(res.participantIdentity, 'student-123');
       expect(res.participantName, 'Mario Rossi');

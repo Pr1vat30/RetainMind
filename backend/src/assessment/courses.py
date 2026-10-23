@@ -147,7 +147,7 @@ class CourseManager:
             encoding="utf-8",
         )
 
-        # Mirror plan and state to root files for LiveKit & CLI backward compatibility
+        # Mirror plan and state to root files for CLI backward compatibility.
         course_plan = cdir / "plan.json"
         if course_plan.exists():
             shutil.copy2(course_plan, cls.ROOT_PLAN_FILE)

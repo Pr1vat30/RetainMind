@@ -2,7 +2,7 @@
 
 Backend per esami orali e monitoraggio pedagogico basato su **FastAPI** e **Pipecat**. L'app Flutter usa il trasporto **WebSocket PCM**; è disponibile anche il signaling **SmallWebRTC**.
 
-Il server FastAPI ospita REST, sessioni Pipecat e trasporti audio sulla porta `8000`. La modalità vocale predefinita è `cascaded` (STT → LLM → TTS); `AGENT_PIPELINE_MODE=gemini_live` abilita il flusso audio nativo Gemini Live.
+Il server FastAPI ospita REST, sessioni Pipecat e trasporti audio sulla porta `8000`. La modalità vocale predefinita è **Gemini Live** (`AGENT_PIPELINE_MODE=gemini_live`), con modello `gemini-3.8-live` e voce `Aoede`. La pipeline cascaded STT → LLM → TTS è opzionale e si attiva con `AGENT_PIPELINE_MODE=cascaded`.
 
 ### Protocollo audio WebSocket Flutter
 
@@ -22,7 +22,7 @@ Il client Flutter si collega a `/ws/{course_id}` (o `/ws` per il corso attivo) e
 
 Il server usa la stessa struttura in uscita con `sampleRate: 24000`. L'evento `clear` interrompe e svuota l'audio accodato durante un'interruzione dell'assistente. La serializzazione è gestita da `src/pcm_serializer.py`; evitare conversioni μ-law o ricampionamenti aggiuntivi nel client.
 
-La generazione dell'ontologia, del piano e dei materiali da argomento usa `gemini-3.5-flash-lite` come modello predefinito (`PLAN_GENERATION_MODEL`). È distinto dal modello vocale Gemini Live, selezionato con `GEMINI_LIVE_MODEL` quando `AGENT_PIPELINE_MODE=gemini_live`.
+La generazione dell'ontologia, del piano e dei materiali da argomento usa `gemini-3.5-flash-lite` come modello predefinito (`PLAN_GENERATION_MODEL`). È indipendente dal modello vocale Gemini Live (`GEMINI_LIVE_MODEL`), predefinito a `gemini-3.8-live`.
 
 I piani creati da un argomento accettano livello (`base`, `intermedio`, `avanzato`) e durata (10–60 minuti). La risposta API include la dispensa e gli argomenti generati, che Flutter presenta per revisione prima di avviare l'esame. I materiali caricati restano preferibili quando occorre aderire a un programma didattico specifico.
 
@@ -35,7 +35,7 @@ Il backend è strutturato in moduli indipendenti e cooperanti secondo principi d
 ```text
 backend/
 ├── src/
-│   ├── agent.py                  # Pipeline vocale Pipecat (Gemini Live o cascade STT/LLM/TTS)
+│   ├── agent.py                  # Pipeline vocale Pipecat (Gemini Live predefinito; cascade opzionale)
 │   ├── api.py                    # Server unificato FastAPI (REST, SmallWebRTC e WebSocket /ws)
 │   ├── config.py                 # Gestione centralizzata della configurazione e variabili d'ambiente
 │   ├── ingest.py                 # Script di ingestione materiali accademici (PDF/MD/TXT -> Graph + Vector)
@@ -94,7 +94,7 @@ backend/
 
 Gli script `start_api_server.sh` e `start_agent_cloud.sh` avviano entrambi il server unificato FastAPI/Pipecat sulla porta `8000`: eseguirne uno solo. Il secondo nome è mantenuto per compatibilità con i comandi precedenti.
 
-Configurare le chiavi necessarie alla modalità scelta in `backend/.env` o `backend/.env.local` (quest'ultimo ha precedenza). In genere servono `GOOGLE_API_KEY` per generazione e Gemini Live, `DEEPGRAM_API_KEY` e `ELEVEN_API_KEY` per la pipeline cascaded. Il client Flutter deve puntare all'indirizzo raggiungibile del server, non a `localhost` quando gira su un dispositivo fisico.
+Configurare le chiavi necessarie alla modalità scelta in `backend/.env` o `backend/.env.local` (quest'ultimo ha precedenza). Per la modalità predefinita servono `GOOGLE_API_KEY` per generazione e Gemini Live. `DEEPGRAM_API_KEY` e `ELEVEN_API_KEY` servono solo se si attiva la pipeline cascaded. Il client Flutter deve puntare all'indirizzo raggiungibile del server, non a `localhost` quando gira su un dispositivo fisico.
 
 Le istanze graph/vector in memoria sono condivise fra generazione del piano e sessione per corso nel processo corrente. Dopo un riavvio vengono ricostruite dai materiali e dal piano salvati. Neo4j e Qdrant sono disponibili come backend configurabili; in assenza dei relativi servizi il codice ripiega sugli store in memoria.
 

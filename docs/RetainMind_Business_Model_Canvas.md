@@ -87,10 +87,10 @@ Il presente documento è articolato in due parti:
 * **B2B — Piani Custom per Scuole Forensi & Post-Laurea:** Setup fee per ontologie personalizzate di facoltà + abbonamento enterprise con SLA dedicato.
 
 ### 6. Key Resources (Risorse Chiave)
-* **Architettura Tecnologica Vocale:** Pipeline vocale real-time basata su Pipecat, con WebSocket PCM per Flutter e modalità cascaded predefinita; Gemini Live è opzionale. La generazione dei piani usa `gemini-3.5-flash-lite` come default.
+* **Architettura Tecnologica Vocale:** Pipeline vocale real-time basata su Pipecat, con WebSocket PCM per Flutter e modalità Gemini Live predefinita; la pipeline cascaded è opzionale. La generazione dei piani usa `gemini-3.5-flash-lite` come default.
 * **Algoritmi e Modelli Proprietari:** Motore pedagogico FSM, implementazione del Bayesian Knowledge Tracing (BKT) e logica di Root Cause Analysis (RCA).
 * **Infrastruttura Dati Hybrid GraphRAG:** Grafo della conoscenza ontologico (Neo4j) e database vettoriale (Qdrant) per l'indicizzazione concettuale topologica.
-* **Modelli Fondazionali di Linguaggio e Voce:** Accesso a modelli per pipeline cascaded (STT, LLM, TTS) e modalità Gemini Live opzionale.
+* **Modelli Fondazionali di Linguaggio e Voce:** Accesso a Gemini Live come modalità vocale predefinita e a modelli cascaded (STT, LLM, TTS) come alternativa opzionale.
 * **Team Multidisciplinare:** Competenze integrate in AI Engineering, audio streaming e WebSocket/WebRTC, Data Engineering e Cognitive Learning Science.
 
 ### 7. Key Activities (Attività Chiave)
@@ -101,7 +101,7 @@ Il presente documento è articolato in due parti:
 * **Community Building e Marketing Accademico:** Presidio delle comunità universitarie, raccolta feedback dagli studenti e validazione sul campo dei tassi di superamento esami.
 
 ### 8. Key Partners (Partner Chiave)
-* **Cloud & Infrastructure Providers:** Google (generazione piani e Gemini Live opzionale), provider STT/LLM/TTS e hosting FastAPI.
+* **Cloud & Infrastructure Providers:** Google (generazione piani e Gemini Live predefinito), provider STT/LLM/TTS per la modalità cascaded opzionale e hosting FastAPI.
 * **Database Vendors:** Neo4j (graph database) e Qdrant (vector engine specializzato).
 * **Ecosistema Accademico:** Docenti innovatori, tutor universitari, comitati di corso di studio e associazioni studentesche.
 * **Case Editrici e Piattaforme di Appunti:** Potenziali collaborazioni con editori universitari (es. Maggioli, Cedam, Pearson) o piattaforme di sharing appunti per l'ingestion legale di testi d'esame.
@@ -190,7 +190,7 @@ I canali riflettono la doppia natura dell'iniziativa, orchestrando l'esperienza 
 La relazione che RetainMind stabilisce con l'utente è intimamente legata all'esperienza psicologica dello studente.
 
 * **La Filosofia "No Judgment Zone" (Ambiente Protetto):** Molti studenti provano terrore reverenziale verso il docente universitario e si vergognano di fare domande stupide o esitare nei ricevimenti. RetainMind instaura una relazione di assoluta sicurezza emotiva: l'agente è incoraggiante, rigoroso ma mai denigratorio.
-* **Voce Calibrata ed Empatica:** La voce dipende dalla modalità e dai provider configurati: cascaded è predefinita, Gemini Live opzionale; naturalezza e latenza vanno misurate sui dispositivi target.
+* **Voce Calibrata ed Empatica:** La voce dipende dalla modalità e dai provider configurati: Gemini Live è predefinita e cascaded opzionale; naturalezza e latenza vanno misurate sui dispositivi target.
 * **Trasparenza Diagnostica:** Il report può mostrare trascrizione, progressi e stime BKT secondo le funzionalità attualmente esposte dall'app.
 * **Onboarding Automatizzato & Frictionless:** Caricamento immediato del PDF o delle slide e generazione automatica dell'albero dei concetti e del piano d'esame senza configurazioni tecniche richieste all'utente finale.
 
@@ -291,8 +291,8 @@ Le attività critiche necessarie per creare, distribuire e mantenere la proposta
 La rete di partnership strategiche consente a RetainMind di concentrarsi sulla propria logica di business e pedagogica senza reinventare l'infrastruttura fondamentale.
 
 * **Pipecat e provider di hosting:** Componenti del runtime vocale e dell'infrastruttura applicativa; SmallWebRTC è disponibile per signaling WebRTC.
-* **Google (generazione piani e Gemini Live opzionale):** Il modello predefinito per piani e materiali da argomento è `gemini-3.5-flash-lite`; il modello vocale è configurabile separatamente.
-* **Provider cascaded (Deepgram, ElevenLabs e altri):** Servizi configurabili per STT, LLM e TTS nella pipeline predefinita.
+* **Google (generazione piani e Gemini Live predefinito):** Il modello predefinito per piani e materiali da argomento è `gemini-3.5-flash-lite`; il modello vocale predefinito è `gemini-3.8-live` con voce `Aoede`.
+* **Provider cascaded (Deepgram, OpenAI, ElevenLabs e altri):** Servizi configurabili per STT, LLM e TTS nella pipeline vocale opzionale.
 * **Database Vendors (Neo4j & Qdrant):** Partner tecnologici per il data storage a grafo e vettoriale ad alte prestazioni.
 * **Università Pilota e Docenti Accademici:** Docenti illuminati e dipartimenti innovativi disposti a sperimentare RetainMind come strumento ufficiale di supporto al tutorato per corsi ad alta mortalità d'esame.
 * **Associazioni Studentesche e Collettivi Universitari:** Canali preferenziali per la diffusione capillare del servizio e l'organizzazione di workshop di preparazione all'esame.
@@ -304,7 +304,7 @@ La rete di partnership strategiche consente a RetainMind di concentrarsi sulla p
 L'analisi dei costi operativi e di sviluppo mette in luce la scalabilità del modello e le principali voci di spesa.
 
 #### A. Costi Variabili di Inferenza e Computing (Direttamente proporzionali all'uso)
-* **Costi dei modelli vocali e LLM:** Dipendono dai servizi STT, LLM e TTS attivati; Gemini Live è opzionale.
+* **Costi dei modelli vocali e LLM:** Dipendono da Gemini Live (modalità predefinita) oppure dai servizi STT, LLM e TTS se si attiva la modalità cascaded.
 * **Costi di Embedding e Ingestion:** Dipendono dall'implementazione configurata; gli embedding sono mock per default.
 * **Costi di Traffico Audio:** Traffico PCM via WebSocket per Flutter o WebRTC se utilizzato.
 

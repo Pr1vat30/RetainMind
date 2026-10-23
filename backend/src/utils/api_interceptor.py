@@ -1,29 +1,22 @@
-"""API Request & Response Interceptor / Logger for LiveKit and Model Gateways."""
+"""API request and response interceptor for provider gateways."""
 
 from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
 
 import aiohttp
 
-logger = logging.getLogger("livekit.api.traffic")
+logger = logging.getLogger("pipecat.api.traffic")
 
 _original_request = aiohttp.ClientSession._request
 _original_ws_connect = aiohttp.ClientSession._ws_connect
 
 
 def enable_api_request_logging() -> None:
-    """Hooks into aiohttp and Gemini Realtime to log all raw outgoing HTTP and WebSocket API requests
-
-    sent to LiveKit Cloud, LiveKit Inference Gateway, and Google Gemini Live.
-    """
-    logger.info("Enabled deep API request & response logging for LiveKit traffic.")
-
-    # Enable Gemini Live debugging in livekit plugin
-    os.environ["LK_GOOGLE_DEBUG"] = "1"
+    """Log outgoing HTTP and WebSocket requests to configured model providers."""
+    logger.info("Enabled deep API request and response logging for provider traffic.")
 
     async def _logged_request(
         self: aiohttp.ClientSession,
@@ -52,7 +45,7 @@ def enable_api_request_logging() -> None:
 
         # Print outgoing request banner
         print("\n" + "═" * 78)
-        print("🚀 [OUTGOING API REQUEST TO LIVEKIT / PROVIDER]")
+        print("🚀 [OUTGOING API REQUEST TO PROVIDER]")
         print(f"   • Method: {method.upper()}")
         print(f"   • URL:    {url_str}")
         if headers:
@@ -92,7 +85,7 @@ def enable_api_request_logging() -> None:
         url_str = str(url)
         headers = kwargs.get("headers", {})
         print("\n" + "═" * 78)
-        print("🔌 [WEBSOCKET CONNECTING TO LIVEKIT / GOOGLE]")
+        print("🔌 [WEBSOCKET CONNECTING TO PROVIDER]")
         print(f"   • URL: {url_str}")
         if headers:
             print(f"   • Headers: {headers}")

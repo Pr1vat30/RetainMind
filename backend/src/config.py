@@ -24,45 +24,16 @@ elif _env.exists():
 else:
     load_dotenv()
 
-# -----------------------------------------------------------------------------
-# LiveKit Cloud Environment Resolution
-# -----------------------------------------------------------------------------
-livekit_env = "cloud"
-if os.getenv("LIVEKIT_CLOUD_URL"):
-    os.environ["LIVEKIT_URL"] = os.getenv("LIVEKIT_CLOUD_URL")
-if os.getenv("LIVEKIT_CLOUD_API_KEY"):
-    os.environ["LIVEKIT_API_KEY"] = os.getenv("LIVEKIT_CLOUD_API_KEY")
-if os.getenv("LIVEKIT_CLOUD_API_SECRET"):
-    os.environ["LIVEKIT_API_SECRET"] = os.getenv("LIVEKIT_CLOUD_API_SECRET")
-
-
 @dataclass(frozen=True)
 class VoiceAgentConfig:
     """Central configuration container for voice agents and backend services."""
-
-    # -------------------------------------------------------------------------
-    # LiveKit Server Mode (Cloud)
-    # -------------------------------------------------------------------------
-    livekit_mode: str = "cloud"
-    livekit_url: str = os.getenv(
-        "LIVEKIT_URL",
-        os.getenv("LIVEKIT_CLOUD_URL", "wss://project-q-xfe1hcdq.livekit.cloud"),
-    )
-    livekit_api_key: str = os.getenv(
-        "LIVEKIT_API_KEY",
-        os.getenv("LIVEKIT_CLOUD_API_KEY", "test_devkey_cloud"),
-    )
-    livekit_api_secret: str = os.getenv(
-        "LIVEKIT_API_SECRET",
-        os.getenv("LIVEKIT_CLOUD_API_SECRET", "test_devsecret_cloud_32_bytes_long!"),
-    )
 
     # -------------------------------------------------------------------------
     # Pipeline & Operational Modes
     # -------------------------------------------------------------------------
     # "gemini_live" = Bidirectional Speech-to-Speech via Google Realtime API
     # "cascaded"    = Sequential STT -> LLM -> TTS pipeline
-    pipeline_mode: str = os.getenv("AGENT_PIPELINE_MODE", "cascaded")
+    pipeline_mode: str = os.getenv("AGENT_PIPELINE_MODE", "gemini_live")
     verbose_requests: bool = os.getenv("VERBOSE_REQUESTS", "true").lower() in (
         "true",
         "1",
@@ -74,7 +45,7 @@ class VoiceAgentConfig:
     # -------------------------------------------------------------------------
     webrtc_mode: str = os.getenv(
         "WEBRTC_MODE", "smallwebrtc"
-    )  # "smallwebrtc" | "livekit"
+    )  # Pipecat SmallWebRTC transport
     webrtc_stun_servers: tuple[str, ...] = ("stun:stun.l.google.com:19302",)
     ws_sample_rate: int = int(os.getenv("WS_SAMPLE_RATE", "16000"))
     audio_sample_rate: int = int(os.getenv("AUDIO_SAMPLE_RATE", "24000"))
@@ -135,7 +106,7 @@ class VoiceAgentConfig:
     # -------------------------------------------------------------------------
     # Agent Identity
     # -------------------------------------------------------------------------
-    agent_name: str = os.getenv("LIVEKIT_AGENT_NAME", "study-examiner-agent")
+    agent_name: str = os.getenv("PIPECAT_AGENT_NAME", "study-examiner-agent")
 
     # -------------------------------------------------------------------------
     # Neo4j Graph Database Configuration
