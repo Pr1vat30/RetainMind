@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants.dart';
-import '../services/livekit_service.dart';
+import '../services/pipecat_service.dart';
 
 class AudioVisualizer extends StatefulWidget {
   final SpeakingStateEnum speakingState;

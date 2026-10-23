@@ -1,6 +1,8 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
 import '../models/session_models.dart';
 
 class ApiService {
@@ -17,7 +19,9 @@ class ApiService {
   void close() => _client.close();
 
   void updateBaseUrl(String newUrl) {
-    baseUrl = newUrl.endsWith('/') ? newUrl.substring(0, newUrl.length - 1) : newUrl;
+    baseUrl = newUrl.endsWith('/')
+        ? newUrl.substring(0, newUrl.length - 1)
+        : newUrl;
   }
 
   Future<bool> checkHealth() async {
@@ -31,10 +35,10 @@ class ApiService {
 
     // 2. Parallel fallback discovery for physical devices & USB tethering
     final candidates = [
-      'http://192.168.1.8:8000',  // Host Mac Wi-Fi LAN IP
+      'http://192.168.1.8:8000', // Host Mac Wi-Fi LAN IP
       'http://192.168.1.15:8000', // Alternate Mac Wi-Fi / Hotspot IP
-      'http://10.0.2.2:8000',     // Android Emulator
-      'http://127.0.0.1:8000',   // USB adb reverse or Desktop
+      'http://10.0.2.2:8000', // Android Emulator
+      'http://127.0.0.1:8000', // USB adb reverse or Desktop
     ].where((c) => c != baseUrl).toList();
 
     try {
@@ -90,14 +94,17 @@ class ApiService {
         .timeout(const Duration(seconds: 8));
 
     if (response.statusCode == 200 || response.statusCode == 201) {
-      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final data =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       return TokenResponse.fromJson(data);
     } else {
-      throw Exception('Errore richiesta token LiveKit: ${response.statusCode} - ${response.body}');
+      throw Exception(
+        'Errore richiesta sessione vocale: ${response.statusCode} - ${response.body}',
+      );
     }
   }
 
-  /// Proactively prewarm LiveKit room and agent connection upon app start.
+  /// Proactively prewarm Pipecat session state upon app start.
   Future<TokenResponse?> warmupSession({String? courseId}) async {
     try {
       final payload = <String, dynamic>{};
@@ -114,11 +121,12 @@ class ApiService {
           .timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        final data =
+            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         return TokenResponse.fromJson(data);
       }
     } catch (e) {
-      debugPrint('LiveKit session warmup skipped: $e');
+      debugPrint('Pipecat session warmup skipped: $e');
     }
     return null;
   }
@@ -127,30 +135,45 @@ class ApiService {
     final uri = courseId != null && courseId.isNotEmpty
         ? Uri.parse('$baseUrl/api/session/status?course_id=$courseId')
         : Uri.parse('$baseUrl/api/session/status');
-    final response = await _client
-        .get(uri)
-        .timeout(const Duration(seconds: 5));
+    final response = await _client.get(uri).timeout(const Duration(seconds: 5));
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final data =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       return SessionStatusInfo.fromJson(data);
     } else {
-      throw Exception('Impossibile recuperare lo stato: ${response.statusCode}');
+      throw Exception(
+        'Impossibile recuperare lo stato: ${response.statusCode}',
+      );
     }
   }
 
   static bool isSilenceOrNoise(String text) {
     final clean = text.trim();
-    if (clean.isEmpty || clean == '-' || clean == '—' || clean == '–' || clean == '...' || clean == '--') {
+    if (clean.isEmpty ||
+        clean == '-' ||
+        clean == '—' ||
+        clean == '–' ||
+        clean == '...' ||
+        clean == '--') {
       return true;
     }
-    final stripped = clean.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '');
+    final stripped = clean.replaceAll(
+      RegExp(r'[^\p{L}\p{N}]', unicode: true),
+      '',
+    );
     if (stripped.isEmpty) return true;
     final lower = clean.toLowerCase();
-    return lower == 'silenzio' || lower == '[silenzio]' || lower == 'silence' || lower == '[silence]';
+    return lower == 'silenzio' ||
+        lower == '[silenzio]' ||
+        lower == 'silence' ||
+        lower == '[silence]';
   }
 
-  Future<List<DialogueTurn>> fetchTranscript({int? iteration, String? courseId}) async {
+  Future<List<DialogueTurn>> fetchTranscript({
+    int? iteration,
+    String? courseId,
+  }) async {
     Uri uri;
     if (courseId != null && courseId.isNotEmpty) {
       uri = Uri.parse('$baseUrl/api/session/transcript?course_id=$courseId');
@@ -163,7 +186,8 @@ class ApiService {
     final response = await _client.get(uri).timeout(const Duration(seconds: 5));
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final data =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       final turns = data['turns'] as List<dynamic>? ?? [];
       return turns
           .map((t) => DialogueTurn.fromJson(t as Map<String, dynamic>))
@@ -190,7 +214,10 @@ class ApiService {
     }
   }
 
-  Future<bool> pauseSession({String reason = 'Pausa da app mobile', String? courseId}) async {
+  Future<bool> pauseSession({
+    String reason = 'Pausa da app mobile',
+    String? courseId,
+  }) async {
     final payload = <String, dynamic>{'reason': reason};
     if (courseId != null && courseId.isNotEmpty) {
       payload['course_id'] = courseId;
@@ -240,7 +267,8 @@ class ApiService {
           )
           .timeout(const Duration(seconds: 10));
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        return jsonDecode(utf8.decode(response.bodyBytes))
+            as Map<String, dynamic>;
       }
     } catch (_) {}
     return {};
@@ -276,12 +304,11 @@ class ApiService {
     final uri = courseId != null && courseId.isNotEmpty
         ? Uri.parse('$baseUrl/api/session/report?course_id=$courseId')
         : Uri.parse('$baseUrl/api/session/report');
-    final response = await http
-        .get(uri)
-        .timeout(const Duration(seconds: 8));
+    final response = await http.get(uri).timeout(const Duration(seconds: 8));
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final data =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       return DiagnosticReport.fromJson(data);
     }
     return null;
@@ -295,7 +322,8 @@ class ApiService {
       final response = await http.get(uri).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        final data =
+            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         return ExaminationPlanModel.fromJson(data);
       }
     } catch (_) {}
@@ -307,12 +335,11 @@ class ApiService {
       final uri = courseId != null && courseId.isNotEmpty
           ? Uri.parse('$baseUrl/api/session/compare?course_id=$courseId')
           : Uri.parse('$baseUrl/api/session/compare');
-      final response = await http
-          .get(uri)
-          .timeout(const Duration(seconds: 6));
+      final response = await http.get(uri).timeout(const Duration(seconds: 6));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        final data =
+            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         return ComparisonReportModel.fromJson(data);
       }
     } catch (_) {}
@@ -324,12 +351,11 @@ class ApiService {
       final uri = courseId != null && courseId.isNotEmpty
           ? Uri.parse('$baseUrl/api/session/history?course_id=$courseId')
           : Uri.parse('$baseUrl/api/session/history');
-      final response = await http
-          .get(uri)
-          .timeout(const Duration(seconds: 5));
+      final response = await http.get(uri).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        final data =
+            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         final list = data['history'] as List<dynamic>? ?? [];
         return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
@@ -357,12 +383,17 @@ class ApiService {
           filename: filename ?? 'document.pdf',
         ),
       );
-      final streamedResponse = await request.send().timeout(const Duration(seconds: 120));
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 120),
+      );
       final response = await http.Response.fromStream(streamedResponse);
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        return jsonDecode(utf8.decode(response.bodyBytes))
+            as Map<String, dynamic>;
       } else {
-        throw Exception('Errore caricamento documento: ${response.statusCode} - ${response.body}');
+        throw Exception(
+          'Errore caricamento documento: ${response.statusCode} - ${response.body}',
+        );
       }
     } else {
       final response = await http
@@ -378,9 +409,12 @@ class ApiService {
           .timeout(const Duration(seconds: 120));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        return jsonDecode(utf8.decode(response.bodyBytes))
+            as Map<String, dynamic>;
       } else {
-        throw Exception('Errore invio note: ${response.statusCode} - ${response.body}');
+        throw Exception(
+          'Errore invio note: ${response.statusCode} - ${response.body}',
+        );
       }
     }
   }
@@ -388,6 +422,8 @@ class ApiService {
   Future<Map<String, dynamic>> generateExamFromTopic({
     required String topic,
     String? title,
+    String level = 'intermedio',
+    int durationMinutes = 20,
   }) async {
     final uri = Uri.parse('$baseUrl/api/courses/generate-from-topic');
     final response = await http
@@ -397,15 +433,19 @@ class ApiService {
           body: jsonEncode({
             'topic': topic,
             if (title != null && title.isNotEmpty) 'title': title,
+            'level': level,
+            'duration_minutes': durationMinutes,
           }),
         )
         .timeout(const Duration(seconds: 120));
 
     if (response.statusCode == 200 || response.statusCode == 201) {
-      return jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      return jsonDecode(utf8.decode(response.bodyBytes))
+          as Map<String, dynamic>;
     } else {
-      throw Exception('Errore generazione esame da argomento: ${response.statusCode} - ${response.body}');
+      throw Exception(
+        'Errore generazione esame da argomento: ${response.statusCode} - ${response.body}',
+      );
     }
   }
 }
-

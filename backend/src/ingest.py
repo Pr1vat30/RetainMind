@@ -5,6 +5,7 @@ import asyncio
 import logging
 from pathlib import Path
 
+from config import config
 from planning import ExaminationPlanner
 from rag import create_graph_store, create_vector_store
 from rag.ingestion import IngestionPipeline
@@ -37,8 +38,8 @@ async def main() -> None:
     parser.add_argument(
         "--model",
         type=str,
-        default="gemini-3.8-flash",
-        help="LLM model name for concept extraction (default: gemini-3.8-flash)",
+        default=config.plan_generation_model,
+        help=f"LLM model name for concept extraction (default: {config.plan_generation_model})",
     )
 
     args = parser.parse_args()

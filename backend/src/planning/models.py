@@ -47,7 +47,7 @@ class PlannedQuestion(BaseModel):
     difficulty: QuestionDifficulty = QuestionDifficulty.MEDIUM
     expected_key_points: list[str] = Field(default_factory=list)
     mastery_threshold: float = 0.75
-    max_attempts: int = 2
+    max_attempts: int = 3
 
 
 class ConceptPlanItem(BaseModel):
@@ -63,6 +63,7 @@ class ConceptPlanItem(BaseModel):
     status: PlanItemStatus = PlanItemStatus.PENDING
     current_attempt: int = 0
     attempts_log: list[dict[str, Any]] = Field(default_factory=list)
+    stress_test_pending: bool = False
 
 
 class DeferredRetryItem(BaseModel):

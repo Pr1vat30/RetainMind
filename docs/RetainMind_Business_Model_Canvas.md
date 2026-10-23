@@ -8,7 +8,7 @@
 ## 📌 Struttura del Documento
 Il presente documento è articolato in due parti:
 1. **Parte 1 — Sintesi Incisiva (Canvas Ready):** Formulazioni concise, dense e strutturate a punti (bullet points), pronte per essere inserite direttamente nei 9 riquadri grafici del template del Business Model Canvas.
-2. **Parte 2 — Approfondimento Strategico e Dettagliato:** Analisi estesa di ciascuno dei 9 blocchi, con focus sul contesto accademico, l'architettura tecnologica (LiveKit, Gemini Live S2S, GraphRAG, BKT), le dinamiche economiche e la strategia di scalabilità.
+2. **Parte 2 — Approfondimento Strategico e Dettagliato:** Analisi estesa di ciascuno dei 9 blocchi, con focus sul contesto accademico, l'architettura tecnologica (Pipecat, FastAPI, GraphRAG, BKT), le dinamiche economiche e la strategia di scalabilità.
 
 ---
 
@@ -18,7 +18,7 @@ Il presente documento è articolato in due parti:
 ┌─────────────────────────┬─────────────────────────┬─────────────────────────┬─────────────────────────┬─────────────────────────┐
 │ 8. KEY PARTNERS         │ 7. KEY ACTIVITIES       │ 1. VALUE PROPOSITIONS   │ 4. CUSTOMER RELATIONS   │ 2. CUSTOMER SEGMENTS    │
 │                         │                         │                         │                         │                         │
-│ • LiveKit & Cloud       │ • R&D Audio Voice AI    │ • Simulazione orale     │ • Voice-driven UX       │ • Studenti Universitari │
+│ • Pipecat & API       │ • R&D Audio Voice AI    │ • Simulazione orale     │ • Voice-driven UX       │ • Studenti Universitari │
 │   Infrastructure        │   e S2S a bassa latenza │   realistica a voce     │   empatica e socratica  │   facoltà complesse     │
 │ • Provider Modelli AI   │ • Ottimizzazione motore │   (full-duplex, fluida) │ • Onboarding guidato    │   (Medicina, Legge,     │
 │   (Google Cloud Gemini) │   pedagogico BKT & FSM  │ • Feedback diagnostico  │   totalmente vocale     │   Ingegneria, STEM)     │
@@ -32,8 +32,8 @@ Il presente documento è articolato in due parti:
 ├─────────────────────────┼─────────────────────────┤ • Studio personalizzato ├─────────────────────────┼─────────────────────────┤
 │ 6. KEY RESOURCES        │                         │   sui propri materiali  │ 3. CHANNELS             │                         │
 │                         │                         │   (PDF, slide, appunti) │                         │                         │
-│ • Pipeline proprietaria │                         │                         │ • Web Application       │                         │
-│   LiveKit Agents WebRTC │                         │                         │   e Mobile Voice Room   │                         │
+│ • Pipeline Pipecat │                         │                         │ • Web Application       │                         │
+│   Pipecat WebSocket PCM │                         │                         │   e Mobile Voice Room   │                         │
 │ • Modello BKT & FSM     │                         │                         │ • Passaparola virale &  │                         │
 │   di valutazione vocale │                         │                         │   community studentesche│                         │
 │ • Motore GraphRAG       │                         │                         │ • Social Education      │                         │
@@ -44,8 +44,8 @@ Il presente documento è articolato in due parti:
 ├─────────────────────────┴─────────────────────────┴─────────────────────────┴─────────────────────────┴─────────────────────────┤
 │ 9. COST STRUCTURE                                                           │ 5. REVENUE STREAMS                                │
 │                                                                             │                                                   │
-│ • Costi di inferenza API AI (Gemini Live Native Audio S2S, Embeddings)      │ • Abbonamento B2C Freemium / Tier Pro (Mensile/Annuale)          │
-│ • Costi di banda e WebRTC media server (LiveKit Cloud o Cluster dedicato)   │ • Pacchetti "Crediti Esame" Pay-per-Use per sessioni intensive    │
+│ • Costi AI: generazione piani e provider vocali                             │ • Abbonamento B2C Freemium / Tier Pro (Mensile/Annuale)          │
+│ • Hosting API e traffico WebSocket/WebRTC                                   │ • Pacchetti "Crediti Esame" Pay-per-Use per sessioni intensive    │
 │ • Gestione cluster Database (Neo4j Graph Database, Qdrant Vector Store)     │ • Licenze Istituzionali SaaS B2B per Università e Dipartimenti    │
 │ • Costi di sviluppo, testing, manutenzione ed engineering software          │ • Piani Enterprise per Accademie Private e Scuole Forensi/Mediche│
 │ • Customer acquisition (Marketing accademico, partnership, community)      │                                                   │
@@ -53,12 +53,12 @@ Il presente documento è articolato in due parti:
 ```
 
 ### 1. Value Propositions (Proposte di Valore)
-* **Simulazione Orale Realistica e Continua:** Interrogazione vocale naturale full-duplex con latenza sub-secondo ($<750$ ms), che ricrea fedelmente la dinamica di un esame universitario formale.
-* **Valutazione Socratica e Scaffolding Dinamico:** L'AI non assegna un voto passivo né fa monologhi; guida lo studente che esita o sbaglia ponendo sotto-domande mirate sugli aspetti mancanti (`uncovered_aspects`).
+* **Simulazione Orale Realistica e Continua:** Sessioni vocali real-time basate su Pipecat, con latenza e qualità da misurare sui dispositivi e provider configurati.
+* **Valutazione Socratica e Scaffolding:** La valutazione confronta le risposte trascritte con i punti attesi nel piano; il sistema può guidare lo studente con domande mirate.
 * **Root Cause Analysis (RCA) delle Lacune:** Identificazione algoritmica dei concetti propedeutici non compresi che causano errori su argomenti complessi, grazie all'ontologia a grafo.
-* **Tracciamento Matematico delle Competenze:** Monitoraggio oggettivo della padronanza latente tramite Bayesian Knowledge Tracing (BKT), senza arbitrarietà.
+* **Tracciamento delle Competenze:** Stima della padronanza tramite BKT, da interpretare come indicatore pedagogico.
 * **Superamento dell'Ansia da Esame:** Ambiente di simulazione privato, sicuro, non giudicante e disponibile h24 per acquisire scioltezza verbale e capacità di sintesi.
-* **Grounding Fattuale su Materiali Propri:** Studio ancorato rigorosamente sui testi, PDF e appunti caricati dallo studente, azzerando le allucinazioni.
+* **Grounding su Materiali Propri:** Piano e recupero possono usare i materiali caricati; il grounding riduce ma non elimina il rischio di errori.
 
 ### 2. Customer Segments (Segmenti di Clientela)
 * **Studenti Universitari (Discipline ad Alto Rigore Concettuale):** Iscritti a facoltà con esami orali determinanti (Medicina e Chirurgia, Giurisprudenza, Ingegneria, Economia, Fisica, Informatica).
@@ -67,7 +67,7 @@ Il presente documento è articolato in due parti:
 * **Accademie di Formazione e Business School Private:** Istituti che desiderano offrire un tutor vocale proprietario personalizzato per i propri iscritti.
 
 ### 3. Channels (Canali)
-* **Canali di Fruizione (Delivery):** Web App (browser desktop/mobile via WebRTC), Mobile App dedicata, Voice Room LiveKit interattiva e CLI per power users/sviluppatori.
+* **Canali di Fruizione (Delivery):** Client Flutter con audio WebSocket PCM; WebRTC tramite signaling SmallWebRTC dove configurato e CLI per power users/sviluppatori.
 * **Canali di Acquisizione B2C:** 
   * Passaparola virale tra studenti e gruppi corso (Telegram, WhatsApp, Discord accademici).
   * Content marketing "Study-with-me" e dimostrazioni audio su TikTok, Instagram Reels, YouTube Edu.
@@ -87,28 +87,28 @@ Il presente documento è articolato in due parti:
 * **B2B — Piani Custom per Scuole Forensi & Post-Laurea:** Setup fee per ontologie personalizzate di facoltà + abbonamento enterprise con SLA dedicato.
 
 ### 6. Key Resources (Risorse Chiave)
-* **Architettura Tecnologica Vocale:** Pipeline real-time LiveKit RTC con Voice Activity Detection neurale e cancellazione avanzata del rumore.
+* **Architettura Tecnologica Vocale:** Pipeline vocale real-time basata su Pipecat, con WebSocket PCM per Flutter e modalità cascaded predefinita; Gemini Live è opzionale. La generazione dei piani usa `gemini-3.5-flash-lite` come default.
 * **Algoritmi e Modelli Proprietari:** Motore pedagogico FSM, implementazione del Bayesian Knowledge Tracing (BKT) e logica di Root Cause Analysis (RCA).
 * **Infrastruttura Dati Hybrid GraphRAG:** Grafo della conoscenza ontologico (Neo4j) e database vettoriale (Qdrant) per l'indicizzazione concettuale topologica.
-* **Modelli Fondazionali di Linguaggio e Voce:** Accesso a modelli S2S a bassissima latenza (Google Gemini Multimodal Live API, Gemma 4, ElevenLabs, Deepgram).
-* **Team Multidisciplinare:** Competenze integrate in AI Engineering, Audio/WebRTC streaming, Data Engineering e Cognitive Learning Science.
+* **Modelli Fondazionali di Linguaggio e Voce:** Accesso a modelli per pipeline cascaded (STT, LLM, TTS) e modalità Gemini Live opzionale.
+* **Team Multidisciplinare:** Competenze integrate in AI Engineering, audio streaming e WebSocket/WebRTC, Data Engineering e Cognitive Learning Science.
 
 ### 7. Key Activities (Attività Chiave)
-* **Ottimizzazione Continua della Latenza Vocale:** Fine-tuning e gestione dei buffer WebRTC per preservare una risposta naturale e fluida sub-secondo.
+* **Ottimizzazione Continua della Latenza Vocale:** Ottimizzazione dei buffer audio e del trasporto WebSocket/WebRTC per preservare una risposta naturale e fluida sub-secondo.
 * **Evoluzione della Logica Pedagogica:** Perfezionamento del rilevamento di esitazioni vocali (`filler words`, pause) e affinamento delle strategie di scaffolding.
-* **Ingegnerizzazione dell'Ingestion Documentale:** Estrazione accurata di concetti e relazioni da PDF complessi, slide universitarie e testi accademici multi-colonna o scansionati (OCR).
-* **Manutenzione e Scalabilità dell'Infrastruttura:** Gestione dei cluster LiveKit, Neo4j e Qdrant a elevata disponibilità e resilienza.
+* **Ingegnerizzazione dell'Ingestion Documentale:** Miglioramento dell'estrazione dai formati supportati; OCR per materiali scansionati è un'evoluzione da valutare.
+* **Manutenzione e Scalabilità dell'Infrastruttura:** Gestione del server FastAPI/Pipecat e degli eventuali servizi Neo4j e Qdrant.
 * **Community Building e Marketing Accademico:** Presidio delle comunità universitarie, raccolta feedback dagli studenti e validazione sul campo dei tassi di superamento esami.
 
 ### 8. Key Partners (Partner Chiave)
-* **Cloud & Infrastructure Providers:** LiveKit (infrastruttura WebRTC managed/cloud), Google Cloud Platform (Gemini Live API e Vertex AI).
+* **Cloud & Infrastructure Providers:** Google (generazione piani e Gemini Live opzionale), provider STT/LLM/TTS e hosting FastAPI.
 * **Database Vendors:** Neo4j (graph database) e Qdrant (vector engine specializzato).
 * **Ecosistema Accademico:** Docenti innovatori, tutor universitari, comitati di corso di studio e associazioni studentesche.
 * **Case Editrici e Piattaforme di Appunti:** Potenziali collaborazioni con editori universitari (es. Maggioli, Cedam, Pearson) o piattaforme di sharing appunti per l'ingestion legale di testi d'esame.
 
 ### 9. Cost Structure (Struttura dei Costi)
-* **Costi di Inferenza AI (Variabili):** Consumo token audio e testo Gemini Multimodal Live API; chiamate a modelli di embedding e OCR.
-* **Infrastruttura Server e Rete (Fissi/Semi-variabili):** Banda WebRTC ad alta priorità, istanze LiveKit server, istanze cloud per Neo4j e Qdrant.
+* **Costi di Inferenza AI (Variabili):** Dipendono dai modelli configurati per piani e voce; embedding e OCR comportano costi solo se attivati.
+* **Infrastruttura Server e Rete (Fissi/Semi-variabili):** Hosting API, traffico audio, inferenza dei provider e servizi Neo4j/Qdrant quando attivati.
 * **Sviluppo Software e Ricerca (Fissi):** Retribuzioni del team di ingegneria AI, sviluppatori full-stack, DevOps e specialisti di scienze dell'apprendimento.
 * **Costi di Marketing e Vendita (Variabili):** Campagne di acquisizione digitale nei periodi di sessione esami, sponsorship di eventi universitari e attività promozionali.
 * **Conformità e Amministrazione:** Spese di compliance GDPR, protezione dei dati biometrici/vocali degli studenti, consulenza legale e sicurezza dei dati.
@@ -132,7 +132,7 @@ Gli studenti soffrono di:
 
 #### La Soluzione Differenziante di RetainMind
 1. **Interrogazione Socratico-Maieutica in Tempo Reale:** A differenza dei comuni assistenti vocali che fungono da risponditori passivi o enciclopedie parlanti, RetainMind assume il ruolo del **docente esaminatore**. Pone la domanda, ascolta attentamente, non interrompe bruscamente e reagisce con risposte vocali immediate.
-2. **Scaffolding Dinamico basato su Aspetti Coperti e Mancanti:** Attraverso il modulo `ResponseEvaluator`, il sistema isola quali punti chiave lo studente ha espresso (`covered_aspects`) e quali ha omesso (`uncovered_aspects`). Se la risposta è parziale, l'AI non dice semplicemente *"Sbagliato"*, ma applica la tecnica pedagogica dello scaffolding: *"Corretto che le transazioni ACID garantiscano l'atomicità, ma come viene gestita la concorrenza tra transazioni parallele?"*.
+2. **Follow-up guidati dal piano:** Il valutatore confronta la risposta trascritta con i punti chiave attesi. Il piano può fornire domande successive per approfondire le lacune emerse.
 3. **Root Cause Analysis (RCA) tramite Ontologia a Grafo:** Se uno studente fallisce l'interrogazione su un concetto avanzato (es. *Teorema CAP* o *Sharding*), il sistema non si limita a registrarlo come fallimento: risale l'ontologia delle dipendenze (`REQUIRES`) per verificare se la lacuna risieda in una mancata comprensione delle basi propedeutiche (es. *Modello Relazionale* o *Consistenza Dati*).
 4. **Tracciamento Matematico tramite Bayesian Knowledge Tracing (BKT):** La conoscenza non è trattata come una percentuale statica, ma come una distribuzione probabilistica $P(L_t)$. Il sistema modella matematicamente la probabilità di apprendimento ($P(T)$), di errore casuale/scivolone ($P(S)$) e di intuizione corretta ($P(G)$), consentendo un quadro scientifico della preparazione.
 5. **Session Management Continuo e Flessibile:** Supporto nativo per la pausa vocale spontanea (*"Mettiamo in pausa"*), ripresa successiva senza perdita di contesto, e iterazioni ripetute con ricalibrazione automatica sui punti deboli emersi nelle sessioni precedenti.
@@ -168,7 +168,7 @@ Il modello individua un approccio ibrido **B2C (Student-First)** e **B2B / B2B2C
 I canali riflettono la doppia natura dell'iniziativa, orchestrando l'esperienza utente e la penetrazione commerciale.
 
 #### Canali di Erogazione e Fruizione (Delivery Channels)
-* **WebRTC Voice Application (Web Desktop & Mobile):** Accessibile via browser senza installazione obbligatoria di software pesante. Consente di avviare la stanza vocale LiveKit, visualizzare la trascrizione e visualizzare il visualizzatore d'onda audio.
+* **Client vocale Flutter:** invia e riceve audio PCM via WebSocket e visualizza trascrizione e stato audio. SmallWebRTC signaling è disponibile per client WebRTC compatibili.
 * **Progressive Web App (PWA) / Mobile App:** Ottimizzata per l'uso in mobilità (ad es. ripasso orale all'aperto o in cuffia camminando).
 * **CLI (Command Line Interface - `session_cli.py`):** Un canale potente per power user, ricercatori e studenti informatici che preferiscono operare da terminale con esportazioni immediate in Markdown dei propri appunti d'esame.
 
@@ -190,8 +190,8 @@ I canali riflettono la doppia natura dell'iniziativa, orchestrando l'esperienza 
 La relazione che RetainMind stabilisce con l'utente è intimamente legata all'esperienza psicologica dello studente.
 
 * **La Filosofia "No Judgment Zone" (Ambiente Protetto):** Molti studenti provano terrore reverenziale verso il docente universitario e si vergognano di fare domande stupide o esitare nei ricevimenti. RetainMind instaura una relazione di assoluta sicurezza emotiva: l'agente è incoraggiante, rigoroso ma mai denigratorio.
-* **Voce Umana, Calibrata ed Empatica:** Grazie alle impostazioni vocali italiane native di Gemini Live (`Aoede` / `Puck`) e all'eliminazione di frasi robotiche o leziosi preamboli, l'AI dialoga con prosodia accademica autentica, dosando le pause e modulando il tono.
-* **Trasparenza Diagnostica Completa:** Il sistema non nasconde i criteri di giudizio dietro una "black box": al termine della sessione o su richiesta, lo studente può visualizzare la mappa dei concetti, i livelli BKT, il calcolo della *Filler Density* (quanti intercalari o "ehm" ha usato) e la *Root Cause Analysis* delle sue incertezze.
+* **Voce Calibrata ed Empatica:** La voce dipende dalla modalità e dai provider configurati: cascaded è predefinita, Gemini Live opzionale; naturalezza e latenza vanno misurate sui dispositivi target.
+* **Trasparenza Diagnostica:** Il report può mostrare trascrizione, progressi e stime BKT secondo le funzionalità attualmente esposte dall'app.
 * **Onboarding Automatizzato & Frictionless:** Caricamento immediato del PDF o delle slide e generazione automatica dell'albero dei concetti e del piano d'esame senza configurazioni tecniche richieste all'utente finale.
 
 ---
@@ -245,13 +245,13 @@ La sostenibilità economica si fonda su un modello ibrido ad alto margine lordo 
 Le risorse chiave garantiscono il vantaggio competitivo e l'eccellenza dell'esperienza d'uso.
 
 #### Risorse Tecnologiche e Proprietà Intellettuale
-* **Pipeline Vocale WebRTC Real-Time:** Integrazione con LiveKit Agents che assicura cancellazione d'eco nativa, gestione di jitter buffer, negoziazione ICE/STUN/TURN e VAD Silero neurale.
+* **Pipeline Vocale Real-Time:** Backend FastAPI/Pipecat con WebSocket PCM per Flutter e signaling SmallWebRTC opzionale; le prestazioni dipendono da provider e dispositivo.
 * **Architettura Dual GraphRAG:**
   * **Neo4j:** Gestisce l'ontologia delle dipendenze concettuali (`ConceptNode`, relazioni `REQUIRES`, `CAUSES`, `CONTRASTS_WITH`), permettendo la navigazione topologica dei prerequisiti.
   * **Qdrant:** Vettore ad alte prestazioni con indicizzazione HNSW per il recupero di passaggi di "Ground Truth" con cui validare la correttezza tecnica.
 * **Algoritmo BKT (Bayesian Knowledge Tracing):** Modello matematico che calcola probabilisticamente la padronanza latente del concetto senza ricorrere a banali score statici.
 * **FSM Pedagogica:** Finite State Machine con transizioni rigorose (`EXPLORATION`, `CAUSAL_NARROWING`, `SCAFFOLDING`, `CONCEPTUAL_COLLISION`, `PREREQUISITE_FALLBACK`) che impediscono all'AI di perdersi in chiacchiere inconcludenti.
-* **Motore di Valutazione Acustica e Verbale (`ResponseEvaluator`):** Algoritmi proprietari per il calcolo della *Filler Density* (intercalari), durata delle pause acustiche e scomposizione in aspetti coperti/non coperti.
+* **Valutazione delle Risposte (`ResponseEvaluator`):** Confronto euristico delle trascrizioni con i punti attesi nel piano; non è una misurazione acustica validata.
 
 #### Risorse Umane e Competenze
 * Ingegneri specializzati in Audio Streaming & WebRTC a bassissima latenza.
@@ -265,20 +265,20 @@ Le risorse chiave garantiscono il vantaggio competitivo e l'eccellenza dell'espe
 Le attività critiche necessarie per creare, distribuire e mantenere la proposta di valore.
 
 #### 1. Ottimizzazione della Latenza e della Fluidità Vocale
-* Monitoraggio costante della latenza p90 (obiettivo: mantenere il round-trip audio $\le 750$ ms).
-* Affinamento della gestione delle interruzioni spontanee (*soft barge-in*): fare in modo che l'AI zittisca immediatamente la propria voce nel millisecondo in cui lo studente ricomincia a parlare.
+* Misurazione della latenza per provider, trasporto e dispositivo, con obiettivi stabiliti sulla base dei benchmark.
+* Miglioramento della gestione delle interruzioni e della riproduzione audio in base ai riscontri reali.
 
 #### 2. R&D sull'Ingegneria Pedagogica e Valutativa
 * Calibrazione dei parametri probabilistici del BKT ($P(L_0)$, $P(T)$, $P(S)$, $P(G)$) sulle diverse discipline per evitare sia l'eccessiva severità che l'eccessiva indulgenza.
 * Miglioramento continuo delle heuristcs di scaffolding affinché l'AI fornisca indizi progressivi sempre più raffinati.
 
 #### 3. Sviluppo del Pipeline di Ingestion Documentale
-* Ottimizzazione del parser multiformato (`pypdf`, OCR Tesseract per appunti scansionati, Markdown).
+* Miglioramento del parser per i formati supportati; OCR per materiali scansionati è un'evoluzione da valutare.
 * Sviluppo di estrattori di grafi concettuali capaci di costruire ontologie ad alta coerenza logica anche da dispense universitarie disordinate o frammentate.
 
 #### 4. Gestione Infrastrutturale e Affidabilità Cloud
 * Manutenzione dei cluster ad alta disponibilità per database a grafo (Neo4j) e database vettoriali (Qdrant).
-* Gestione delle sessioni concorrenti WebRTC e bilanciamento dei server media LiveKit.
+* Gestione delle sessioni audio concorrenti e dimensionamento del server FastAPI/Pipecat.
 
 #### 5. Marketing, Community Engagement & Customer Support
 * Presidio attivo delle comunità studentesche universitarie durante le finestre d'esame.
@@ -290,9 +290,9 @@ Le attività critiche necessarie per creare, distribuire e mantenere la proposta
 
 La rete di partnership strategiche consente a RetainMind di concentrarsi sulla propria logica di business e pedagogica senza reinventare l'infrastruttura fondamentale.
 
-* **LiveKit (Infrastruttura RTC & Media Transport):** Partner essenziale per l'infrastruttura WebRTC su scala globale, le stanze audio resilienti e l'ecosistema `livekit-agents`.
-* **Google Cloud & DeepMind (Gemini Live API):** Fornitore del modello fondazionale `gemini-2.5-flash-native-audio` che abilita il passaggio diretto Speech-to-Speech con pronuncia e intonazione italiana naturale.
-* **Fornitori di Fallback Cascaded (Deepgram, ElevenLabs):** Partner di continuità operativa per garantire che il sistema funzioni anche in modalità cascata tradizionale (STT $\rightarrow$ LLM $\rightarrow$ TTS) in caso di indisponibilità dei canali nativi.
+* **Pipecat e provider di hosting:** Componenti del runtime vocale e dell'infrastruttura applicativa; SmallWebRTC è disponibile per signaling WebRTC.
+* **Google (generazione piani e Gemini Live opzionale):** Il modello predefinito per piani e materiali da argomento è `gemini-3.5-flash-lite`; il modello vocale è configurabile separatamente.
+* **Provider cascaded (Deepgram, ElevenLabs e altri):** Servizi configurabili per STT, LLM e TTS nella pipeline predefinita.
 * **Database Vendors (Neo4j & Qdrant):** Partner tecnologici per il data storage a grafo e vettoriale ad alte prestazioni.
 * **Università Pilota e Docenti Accademici:** Docenti illuminati e dipartimenti innovativi disposti a sperimentare RetainMind come strumento ufficiale di supporto al tutorato per corsi ad alta mortalità d'esame.
 * **Associazioni Studentesche e Collettivi Universitari:** Canali preferenziali per la diffusione capillare del servizio e l'organizzazione di workshop di preparazione all'esame.
@@ -304,13 +304,13 @@ La rete di partnership strategiche consente a RetainMind di concentrarsi sulla p
 L'analisi dei costi operativi e di sviluppo mette in luce la scalabilità del modello e le principali voci di spesa.
 
 #### A. Costi Variabili di Inferenza e Computing (Direttamente proporzionali all'uso)
-* **Costi Gemini Multimodal Live API:** Tariffazione al minuto o al milione di token per l'elaborazione continua del flusso audio bidirezionale in streaming WebRTC.
-* **Costi di Embedding Vettoriale e Ingestion:** Spese per la generazione di vettori (es. `text-embedding-004`) durante il parsing iniziale dei documenti.
-* **Costi di Traffico Dati WebRTC:** Consumo di banda per l'inoltro dei pacchetti audio Opus a 24/48 kHz tramite LiveKit Media Server.
+* **Costi dei modelli vocali e LLM:** Dipendono dai servizi STT, LLM e TTS attivati; Gemini Live è opzionale.
+* **Costi di Embedding e Ingestion:** Dipendono dall'implementazione configurata; gli embedding sono mock per default.
+* **Costi di Traffico Audio:** Traffico PCM via WebSocket per Flutter o WebRTC se utilizzato.
 
 #### B. Costi Fissi e Semi-Variabili di Infrastruttura
 * **Hosting Cluster Database:** Server dedicati o istanze cloud managed per Neo4j Aura / cluster Neo4j e Qdrant Cloud.
-* **LiveKit Cloud / Server Instances:** Costi di abbonamento o istanze computazionali dedicate per i media gateway.
+* **Hosting FastAPI/Pipecat:** Costi dell'applicazione e del trasporto audio.
 * **Storage e Backup:** Memorizzazione sicura dei grafi di conoscenza utente, vettori e snapshot delle sessioni (`session_state.json`).
 
 #### C. Costi Operativi, di Ricerca e Sviluppo (R&D)

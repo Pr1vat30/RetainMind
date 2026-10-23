@@ -21,6 +21,11 @@ dependencies = [
     "aiohttp>=3.9.0",
     "python-dotenv",
     "qdrant-client>=1.19.0",
+    "pipecat-ai[deepgram,elevenlabs,google,openai,silero,webrtc]>=0.0.108",
+    "fastapi>=0.161.1",
+    "uvicorn>=0.54.0",
+    "python-multipart>=0.0.32",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]

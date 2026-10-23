@@ -4,6 +4,8 @@ class TokenResponse {
   final String roomName;
   final String participantIdentity;
   final String participantName;
+  /// WebSocket endpoint returned by the Pipecat backend, e.g. `ws://host:8000/ws/course_id`
+  final String? websocketEndpoint;
 
   TokenResponse({
     required this.serverUrl,
@@ -11,6 +13,7 @@ class TokenResponse {
     required this.roomName,
     required this.participantIdentity,
     required this.participantName,
+    this.websocketEndpoint,
   });
 
   factory TokenResponse.fromJson(Map<String, dynamic> json) {
@@ -20,6 +23,7 @@ class TokenResponse {
       roomName: json['room_name'] as String? ?? '',
       participantIdentity: json['participant_identity'] as String? ?? '',
       participantName: json['participant_name'] as String? ?? '',
+      websocketEndpoint: json['websocket_endpoint'] as String?,
     );
   }
 }

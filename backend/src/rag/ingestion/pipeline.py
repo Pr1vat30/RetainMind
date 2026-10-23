@@ -10,6 +10,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from config import config
 from rag.graph_store import BaseGraphStore
 from rag.ingestion.extractor import KnowledgeExtractor
 from rag.ingestion.parser import DocumentParser
@@ -40,7 +41,7 @@ class IngestionPipeline:
         document_id: str,
         structured_ontology: dict[str, Any] | None = None,
         use_llm: bool = True,
-        llm_model: str = "gemini-3.8-flash",
+        llm_model: str | None = None,
     ) -> dict[str, Any]:
         """Ingests a document text and optional structured ontology schema."""
         # 1. Parse into semantic chunks
@@ -55,9 +56,9 @@ class IngestionPipeline:
             concepts, relations, _ = self.extractor.parse_structured_json(
                 structured_ontology
             )
-        else:
+        elif use_llm:
             concepts, relations, _ = self.extractor.extract_with_llm(
-                chunks=chunks, model=llm_model
+                chunks=chunks, model=llm_model or config.plan_generation_model
             )
 
         # Map concept IDs to chunks by keyword search
@@ -70,6 +71,13 @@ class IngestionPipeline:
                 ):
                     chunk_concepts.append(c.id)
             chunk.concept_ids = chunk_concepts
+
+        known_ids = {concept.id for concept in concepts}
+        relations = [
+            relation
+            for relation in relations
+            if relation.source_id in known_ids and relation.target_id in known_ids
+        ]
 
         # 3. Index chunks into Vector Store (Qdrant)
         indexed_count = await self.vector_store.index_chunks(chunks)
@@ -93,7 +101,7 @@ class IngestionPipeline:
         document_id: str | None = None,
         structured_ontology: dict[str, Any] | None = None,
         use_llm: bool = True,
-        llm_model: str = "gemini-3.8-flash",
+        llm_model: str | None = None,
     ) -> dict[str, Any]:
         """Ingests a file (PDF, MD, TXT) from disk."""
         doc_id = document_id or Path(file_path).stem
@@ -105,9 +113,9 @@ class IngestionPipeline:
             concepts, relations, _ = self.extractor.parse_structured_json(
                 structured_ontology
             )
-        else:
+        elif use_llm:
             concepts, relations, _ = self.extractor.extract_with_llm(
-                chunks=chunks, model=llm_model
+                chunks=chunks, model=llm_model or config.plan_generation_model
             )
 
         for chunk in chunks:
@@ -119,6 +127,19 @@ class IngestionPipeline:
                 ):
                     chunk_concepts.append(c.id)
             chunk.concept_ids = chunk_concepts
+
+        known_ids = {concept.id for concept in concepts}
+        valid_relations = [
+            relation
+            for relation in relations
+            if relation.source_id in known_ids and relation.target_id in known_ids
+        ]
+        if len(valid_relations) != len(relations):
+            logger.warning(
+                "Discarding %d ontology relations with unknown concept IDs",
+                len(relations) - len(valid_relations),
+            )
+        relations = valid_relations
 
         indexed_count = await self.vector_store.index_chunks(chunks)
 

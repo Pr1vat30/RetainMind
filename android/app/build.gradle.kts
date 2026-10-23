@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.retain_mind"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = maxOf(flutter.compileSdkVersion, 34)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

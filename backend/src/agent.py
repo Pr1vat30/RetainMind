@@ -1,41 +1,46 @@
-"""LiveKit Voice AI Agent Entrypoint for Oral Examination & Study Assistance.
+"""Pipecat Voice AI Agent for Oral Examination & Socratic Study Assistance.
 
-Supports dual operational architectures:
-1. Gemini Live API: End-to-end multimodal speech-to-speech with Google RealtimeModel,
-   neural noise cancellation (ai_coustics QUAIL_VF_S), and realtime function calling
-   for pedagogical steering (`evaluate_and_advance`, `get_exam_progress`, `get_session_summary`).
-2. Cascaded Voice Pipeline: Deepgram Nova-3 STT -> Local/Inference LLM -> ElevenLabs Turbo v2.5 TTS
-   with turn detector and preemptive audio synthesis.
+Supports:
+1. WebRTC streaming via SmallWebRTCTransport (peer-to-peer without media server).
+2. WebSocket streaming via FastAPIWebsocketTransport with the Flutter PCM protocol.
+3. Gemini Live Multimodal Speech-to-Speech (Google GenAI Realtime).
+4. Cascaded Voice Pipeline: Silero VAD -> Deepgram STT -> LLM -> ElevenLabs TTS.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 import re
-import shutil
-from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from livekit import rtc
-from livekit.agents import (
-    Agent,
-    AgentServer,
-    AgentSession,
-    JobContext,
-    JobProcess,
-    RunContext,
-    TurnHandlingOptions,
-    cli,
-    function_tool,
-    inference,
-    llm,
-    room_io,
-    stt,
-    tts,
-)
 from google.genai import types
-from livekit.plugins import ai_coustics, deepgram, elevenlabs, google, openai
+from pipecat.adapters.schemas.function_schema import FunctionSchema
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import (
+    EndFrame,
+    LLMContextFrame,
+    TextFrame,
+)
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
+from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_response_universal import (
+    LLMContextAggregatorPair,
+)
+from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+from pipecat.services.google.gemini_live.llm import (
+    GeminiLiveLLMService,
+    GeminiVADParams,
+)
+from pipecat.services.llm_service import FunctionCallParams
+from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.transports.base_transport import BaseTransport, TransportParams
 
 from assessment import (
     PedagogicalState,
@@ -45,7 +50,7 @@ from assessment import (
     is_silence_or_noise,
 )
 from config import config
-from orchestrator import LocalOrchestratedLLM
+from orchestrator.local_llm import LocalOrchestratedLLMService
 from planning.models import PlanItemStatus
 from prompts import (
     ORAL_EXAMINER_SYSTEM_INSTRUCTIONS,
@@ -60,8 +65,27 @@ if config.verbose_requests:
 logger = logging.getLogger("agent")
 
 
+async def _queue_opening_greeting(task: PipelineTask, greeting: str) -> None:
+    """Seed Gemini's initial context with a prompt that makes it speak first."""
+    prompt = (
+        "Lo studente si è appena collegato alla sessione. "
+        "Avvia subito la conversazione pronunciando ad alta voce, in italiano, "
+        f"esattamente questo saluto e nient'altro: {greeting}"
+    )
+    # Gemini Live ignores audio until it has processed an initial context.
+    # The context frame is retained if it arrives before the network session
+    # is ready, then Gemini's service seeds the prompt and starts generation.
+    await task.queue_frames(
+        [
+            LLMContextFrame(
+                context=LLMContext(messages=[{"role": "user", "content": prompt}])
+            )
+        ]
+    )
+
+
 def extract_custom_vocabulary(plan, max_terms: int = 100) -> list[str]:
-    """Extract domain terms, technical concepts, and keywords from the examination plan for Gemini 3.8 Live biasing."""
+    """Extract domain terms, technical concepts, and keywords from the examination plan for Gemini Live biasing."""
     terms: set[str] = set()
     if not plan:
         return []
@@ -79,84 +103,35 @@ def extract_custom_vocabulary(plan, max_terms: int = 100) -> list[str]:
     return sorted(result)[:max_terms]
 
 
-class OralExaminerAgent(Agent):
-    """Voice AI Oral Examiner with Hybrid RAG & Knowledge Tracing."""
+class OralExaminerAgent:
+    """Voice AI Oral Examiner with Hybrid RAG & Knowledge Tracing for Pipecat."""
 
     def __init__(
         self,
         assessment_manager: SessionAssessmentManager | None = None,
-        examiner_llm: llm.LLM | llm.RealtimeModel | None = None,
+        examiner_llm: Any = None,
         instructions: str | None = None,
     ) -> None:
         self.assessment_manager = assessment_manager or SessionAssessmentManager(
             graph_store=create_graph_store("memory"),
             vector_store=create_vector_store("memory"),
         )
+        self.examiner_llm = examiner_llm
         self.last_assistant_ts: float = 0.0
         self.last_spoken_directive: str = ""
-        final_instructions = instructions or ORAL_EXAMINER_SYSTEM_INSTRUCTIONS
+        self.instructions = instructions or ORAL_EXAMINER_SYSTEM_INSTRUCTIONS
 
-        if examiner_llm is not None:
-            chosen_llm = examiner_llm
-        elif config.pipeline_mode == "gemini_live":
-            vocab = extract_custom_vocabulary(self.assessment_manager.examination_plan)
-            chosen_llm = google.realtime.RealtimeModel(
-                model=config.gemini_live_model,
-                voice=config.gemini_voice,
-                api_key=config.google_api_key or None,
-                instructions=final_instructions,
-                temperature=0.3,
-                input_audio_transcription=(
-                    types.AudioTranscriptionConfig(custom_vocabulary=vocab)
-                    if vocab
-                    else types.AudioTranscriptionConfig()
-                ),
-                output_audio_transcription=types.AudioTranscriptionConfig(),
-                realtime_input_config=types.RealtimeInputConfig(
-                    activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
-                    automatic_activity_detection=types.AutomaticActivityDetection(
-                        start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
-                        end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
-                        prefix_padding_ms=100,
-                        silence_duration_ms=250,
-                    ),
-                    turn_coverage=types.TurnCoverage.TURN_INCLUDES_ONLY_ACTIVITY,
-                ),
-                context_window_compression=types.ContextWindowCompressionConfig(
-                    sliding_window=types.SlidingWindow()
-                ),
-            )
-        elif config.openai_api_key:
-            chosen_llm = openai.LLM(
-                model="gpt-4o-mini",
-                api_key=config.openai_api_key,
-            )
-        else:
-            chosen_llm = LocalOrchestratedLLM(
-                assessment_manager=self.assessment_manager
-            )
-
-        super().__init__(
-            llm=chosen_llm,
-            instructions=final_instructions,
-        )
-
-    @function_tool
     async def evaluate_and_advance(
-        self, context: RunContext, student_response: str
+        self, context: Any = None, student_response: str = ""
     ) -> str:
         """Evaluate the student's answer, update the knowledge graph & Bayesian mastery,
-        and retrieve the next ground-truth context and pedagogical directive.
-
-        **Invocation Condition:** Invoke this tool immediately every time the student provides
-        an answer, partial response, hesitation, or request to change question during the examination loop.
-
-        Args:
-            student_response: The exact transcript of what the student said.
-        """
+        and retrieve the next ground-truth context and pedagogical directive."""
         try:
             if is_silence_or_noise(student_response):
-                logger.info("evaluate_and_advance: ignoring silence/noise utterance ('%s')", student_response)
+                logger.info(
+                    "evaluate_and_advance: ignoring silence/noise utterance ('%s')",
+                    student_response,
+                )
                 return (
                     "status: ok\n"
                     "retryable: false\n"
@@ -210,7 +185,8 @@ class OralExaminerAgent(Agent):
                 f"CONTESTO DAL DOCUMENTO:\n{prompt_context}\n\n"
                 f"REGOLE: Esprimi la direttiva pedagogica con tono naturale ed empatico da professore. "
                 f"Non ripetere la stessa identica domanda precedente. "
-                f"Se lo studente ha chiesto di cambiare o se ha fallito dopo l'indizio, passa direttamente alla nuova domanda inclusa nella direttiva.{anti_repeat_note}"
+                f"Se la direttiva chiede allo studente se vuole riprovare o cambiare argomento, pronuncia la domanda e attendi la sua scelta; non cambiare argomento senza una conferma chiara. "
+                f"Se lo studente chiede esplicitamente di saltare l'argomento, segui la nuova domanda inclusa nella direttiva.{anti_repeat_note}"
             )
         except Exception as err:
             logger.exception("Error in evaluate_and_advance: %s", err)
@@ -220,13 +196,8 @@ class OralExaminerAgent(Agent):
                 "message: Continua l'interrogazione verificando i concetti chiave del corso."
             )
 
-    @function_tool
-    async def get_exam_progress(self, context: RunContext) -> str:
-        """Get the current progress percentage and status of the examination plan.
-
-        **Invocation Condition:** Invoke this tool *only if* the student explicitly asks about
-        their progress, remaining questions, or how the exam is proceeding.
-        """
+    async def get_exam_progress(self, context: Any = None) -> str:
+        """Get the current progress percentage and status of the examination plan."""
         plan = self.assessment_manager.examination_plan
         if not plan:
             return (
@@ -242,13 +213,8 @@ class OralExaminerAgent(Agent):
             f"({plan.current_index + 1} di {len(plan.concept_order)} argomenti)."
         )
 
-    @function_tool
-    async def get_session_summary(self, context: RunContext) -> str:
-        """Generate the student's performance report and Root Cause Analysis.
-
-        **Invocation Condition:** Invoke this tool when the examination is completed or
-        when the student explicitly requests a final grade, recap, or diagnostic review.
-        """
+    async def get_session_summary(self, context: Any = None) -> str:
+        """Generate the student's performance report and Root Cause Analysis."""
         try:
             report_gen = SessionReportGenerator(self.assessment_manager.graph_store)
             rep = await report_gen.generate_diagnostic_report(
@@ -256,11 +222,7 @@ class OralExaminerAgent(Agent):
                 self.assessment_manager.iterations_history,
             )
             spoken = rep.get("spoken_summary", "Sessione completata con successo.")
-            return (
-                f"status: ok\n"
-                f"retryable: false\n"
-                f"{spoken}"
-            )
+            return f"status: ok\nretryable: false\n{spoken}"
         except Exception as err:
             logger.exception("Error generating session summary: %s", err)
             return (
@@ -269,15 +231,8 @@ class OralExaminerAgent(Agent):
                 "message: Riepilogo della sessione completato."
             )
 
-    @function_tool
-    async def pause_session(self, context: RunContext, reason: str = "") -> str:
-        """Pause the oral examination session and persist all progress to disk.
-
-        **CRITICAL INVOCATION CONDITION:** Invoke this tool ONLY AND EXCLUSIVELY if the student explicitly
-        commands to pause, take a break, or stop the exam (e.g., 'pausa', 'fermiamoci qui', 'facciamo una pausa', 'voglio fermarmi').
-        NEVER invoke this tool during normal student answers, technical discussions (e.g., early stopping, bootstrap, criteria),
-        hesitations, thinking pauses, silence, or regular questions!
-        """
+    async def pause_session(self, context: Any = None, reason: str = "") -> str:
+        """Pause the oral examination session and persist all progress to disk."""
         try:
             examiner_ctx, _ = await self.assessment_manager.pause_session(reason=reason)
             return (
@@ -294,13 +249,8 @@ class OralExaminerAgent(Agent):
                 "message: Sessione messa in pausa con successo."
             )
 
-    @function_tool
-    async def resume_session(self, context: RunContext) -> str:
-        """Resume a paused oral examination session from the exact topic and question.
-
-        **Invocation Condition:** Invoke this tool when the student expresses readiness to resume
-        a previously paused exam session (e.g., 'riprendiamo', 'sono pronto a continuare').
-        """
+    async def resume_session(self, context: Any = None) -> str:
+        """Resume a paused oral examination session from the exact topic and question."""
         try:
             examiner_ctx, _ = await self.assessment_manager.resume_session()
             prompt_context = build_examiner_turn_prompt(examiner_ctx)
@@ -319,13 +269,8 @@ class OralExaminerAgent(Agent):
                 "message: Bentornato! Riprendiamo l'esame dal punto in cui lo avevamo interrotto."
             )
 
-    @function_tool
-    async def repeat_examination(self, context: RunContext) -> str:
-        """Restart the oral examination as a new iteration, dynamically adapting to previous attempts.
-
-        **Invocation Condition:** Invoke this tool when the student asks to repeat, retake, or restart
-        the examination (e.g., 'ripetiamo l'esame', 'voglio fare un altro tentativo', 'ricominciamo').
-        """
+    async def repeat_examination(self, context: Any = None) -> str:
+        """Restart the oral examination as a new iteration, dynamically adapting to previous attempts."""
         try:
             examiner_ctx, _ = await self.assessment_manager.restart_examination(
                 adapt_from_previous=True
@@ -346,13 +291,8 @@ class OralExaminerAgent(Agent):
                 "message: Avviamo una nuova sessione d'esame. Sei pronto a ricominciare?"
             )
 
-    @function_tool
-    async def get_exam_history_and_comparison(self, context: RunContext) -> str:
-        """Compare the student's current performance with previous exam iterations and show historical evolution.
-
-        **Invocation Condition:** Invoke this tool when the student asks about their progress over time,
-        historical comparisons, or how they improved compared to previous attempts.
-        """
+    async def get_exam_history_and_comparison(self, context: Any = None) -> str:
+        """Compare the student's current performance with previous exam iterations."""
         try:
             report_gen = SessionReportGenerator(self.assessment_manager.graph_store)
             comp = await report_gen.compare_iterations(
@@ -363,11 +303,7 @@ class OralExaminerAgent(Agent):
                 "spoken_comparison",
                 "Non ci sono iterazioni precedenti sufficienti per un confronto.",
             )
-            return (
-                f"status: ok\n"
-                f"retryable: false\n"
-                f"{spoken}"
-            )
+            return f"status: ok\nretryable: false\n{spoken}"
         except Exception as err:
             logger.exception("Error comparing exam iterations: %s", err)
             return (
@@ -376,13 +312,8 @@ class OralExaminerAgent(Agent):
                 "message: Confronto con le iterazioni precedenti completato."
             )
 
-    @function_tool
-    async def get_conversation_transcript(self, context: RunContext) -> str:
-        """Retrieve the formatted full transcript of the questions and answers from the current examination.
-
-        **Invocation Condition:** Invoke this tool when the student asks to review what has been said,
-        recap previous questions/answers, or check the dialogue transcript.
-        """
+    async def get_conversation_transcript(self, context: Any = None) -> str:
+        """Retrieve the formatted full transcript of current examination."""
         try:
             turns = self.assessment_manager.history
             if not turns:
@@ -399,11 +330,7 @@ class OralExaminerAgent(Agent):
                 a = t.get("student_transcript", "")[:80]
                 res = t.get("evaluation", "N/A")
                 summary_lines.append(f"Turno {t_num} [{res}]: D: {q} | R: {a}")
-            return (
-                f"status: ok\n"
-                f"retryable: false\n"
-                + "\n".join(summary_lines)
-            )
+            return f"status: ok\nretryable: false\n" + "\n".join(summary_lines)
         except Exception as err:
             logger.exception("Error retrieving transcript: %s", err)
             return (
@@ -412,287 +339,209 @@ class OralExaminerAgent(Agent):
                 "message: Impossibile recuperare la trascrizione al momento."
             )
 
+    def get_tools_schema(self) -> list[FunctionSchema]:
+        """Convert agent methods into Pipecat FunctionSchema tools for function calling."""
 
-def prewarm(proc: JobProcess) -> None:
-    """Prewarm LiveKit agent worker processes during startup before any job arrives.
-    
-    1. Pre-initializes Google GenAI Client with credentials so TLS/HTTP connection pools are warm.
-    2. Wakes up the LiveKit Google plugin classes in memory to eliminate dynamic import latency.
-    3. Caches resources in proc.userdata for sub-100ms job acquisition.
-    """
-    logger.info("🔥 Prewarming LiveKit agent worker process (PID: %d)...", proc.pid)
-    try:
-        from google import genai
-        api_key = config.google_api_key or None
-        if api_key:
-            client = genai.Client(api_key=api_key)
-            proc.userdata["genai_client"] = client
-            logger.info("🔥 GenAI client prewarmed and cached in worker PID %d", proc.pid)
-    except Exception as e:
-        logger.warning("Could not prewarm GenAI client in worker PID %d: %s", proc.pid, e)
-
-
-server = AgentServer(
-    setup_fnc=prewarm,
-    num_idle_processes=1,
-)
-
-
-async def on_session_end(ctx: JobContext) -> None:
-    """Invoked when the voice session ends to record telemetry and session summary."""
-    try:
-        report = ctx.make_session_report()
-        report_dict = report.to_dict()
-        logger.info(
-            "Session ended for room %s: %d conversation events logged.",
-            ctx.room.name,
-            len(report_dict.get("events", [])),
-        )
-    except Exception as err:
-        logger.warning(
-            "Could not generate final session report for room %s: %s",
-            ctx.room.name,
-            err,
-        )
-
-
-@server.rtc_session(agent_name=config.agent_name, on_session_end=on_session_end)
-async def my_agent(ctx: JobContext):
-    # Contextual structured logging setup
-    ctx.log_context_fields = {
-        "room": ctx.room.name,
-        "agent": config.agent_name,
-        "pipeline_mode": config.pipeline_mode,
-    }
-    logger.info(
-        "Initializing oral examination voice session for room %s (Mode: %s)",
-        ctx.room.name,
-        config.pipeline_mode,
-    )
-    execution_mode = "cloud"
-
-    # Resolve target course_id from LiveKit room name or active course
-    from assessment.courses import CourseManager
-    CourseManager.ensure_directories()
-
-    course_id = None
-    if getattr(ctx, "job", None) and getattr(ctx.job, "metadata", None):
-        course_id = ctx.job.metadata.strip() or None
-
-    if not course_id and getattr(ctx.room, "metadata", None):
-        course_id = ctx.room.metadata.strip() or None
-
-    if not course_id and ctx.room.name:
-        match = re.match(r"^oral-exam-(.+?)(?:-\d{10,})?$", ctx.room.name)
-        if match and match.group(1) not in ("room", "default") and not match.group(1).isdigit():
-            course_id = match.group(1)
-        elif ctx.room.name.startswith("oral-exam-") and ctx.room.name not in ("oral-exam", "oral-exam-room"):
-            candidate = ctx.room.name[len("oral-exam-"):]
-            if candidate and not candidate.isdigit():
-                course_id = candidate
-
-    # -------------------------------------------------------------------------
-    # ZERO-LATENCY DIRECT BENCHMARK MODE (Modalità Test Diretto senza DB / Vettori / OCR)
-    # -------------------------------------------------------------------------
-    is_direct_test = (
-        course_id == "direct_test"
-        or ctx.room.name.startswith("direct-test")
-        or (getattr(ctx, "job", None) and getattr(ctx.job, "metadata", "") == "direct_test")
-    )
-    if is_direct_test:
-        logger.info(
-            "⚡ [DIRECT BENCHMARK MODE] Avvio agente vocale zero-overhead per room: %s",
-            ctx.room.name,
-        )
-        direct_instructions = (
-            "Sei un assistente vocale intelligente, amichevole e super-reattivo. "
-            "Rispondi SEMPRE in italiano in modo conciso, colloquiale e naturale a qualsiasi domanda, osservazione o tema proposto dall'utente. "
-            "Non usare elenchi puntati né markdown. Mantieni risposte brevi di 1-3 frasi per una conversazione vocale rapida e piacevole."
-        )
-
-        is_gemini_live_direct = (config.pipeline_mode == "gemini_live")
-
-        if is_gemini_live_direct:
-            direct_model = google.realtime.RealtimeModel(
-                model=config.gemini_live_model,
-                voice=config.gemini_voice,
-                api_key=config.google_api_key or None,
-                instructions=direct_instructions,
-                temperature=0.3,
-                realtime_input_config=types.RealtimeInputConfig(
-                    activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
-                    automatic_activity_detection=types.AutomaticActivityDetection(
-                        start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
-                        end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
-                        prefix_padding_ms=100,
-                        silence_duration_ms=250,
-                    ),
-                    turn_coverage=types.TurnCoverage.TURN_INCLUDES_ONLY_ACTIVITY,
-                ),
+        async def _eval_handler(params: FunctionCallParams):
+            args = params.arguments or {}
+            resp = await self.evaluate_and_advance(
+                context=params.context,
+                student_response=str(args.get("student_response", "")),
             )
-            direct_session = AgentSession(llm=direct_model)
-            direct_agent = Agent(llm=direct_model, instructions=direct_instructions)
-        else:
-            stt_inst = (
-                deepgram.STT(api_key=config.deepgram_api_key, language=config.stt_language)
-                if config.deepgram_api_key
-                else inference.STT(model=config.stt_primary_model, language=config.stt_language)
+            await params.result_callback(resp)
+
+        async def _progress_handler(params: FunctionCallParams):
+            resp = await self.get_exam_progress(context=params.context)
+            await params.result_callback(resp)
+
+        async def _summary_handler(params: FunctionCallParams):
+            resp = await self.get_session_summary(context=params.context)
+            await params.result_callback(resp)
+
+        async def _pause_handler(params: FunctionCallParams):
+            args = params.arguments or {}
+            resp = await self.pause_session(
+                context=params.context,
+                reason=str(args.get("reason", "")),
             )
-            tts_inst = (
-                elevenlabs.TTS(voice_id=config.tts_voice, model="eleven_turbo_v2_5", api_key=config.eleven_api_key)
-                if config.eleven_api_key
-                else inference.TTS(model=config.tts_primary_model, voice=config.tts_voice)
-            )
-            direct_session = AgentSession(stt=stt_inst, tts=tts_inst)
-            direct_agent = Agent(instructions=direct_instructions)
+            await params.result_callback(resp)
 
-        await ctx.connect()
+        async def _resume_handler(params: FunctionCallParams):
+            resp = await self.resume_session(context=params.context)
+            await params.result_callback(resp)
 
-        @ctx.room.on("participant_disconnected")
-        def on_direct_participant_disconnected(participant: rtc.RemoteParticipant):
-            if not participant.identity.startswith("agent-"):
-                logger.info("Direct test participant left room %s, shutting down job.", ctx.room.name)
-                ctx.shutdown()
+        async def _repeat_handler(params: FunctionCallParams):
+            resp = await self.repeat_examination(context=params.context)
+            await params.result_callback(resp)
 
-        await direct_session.start(agent=direct_agent, room=ctx.room)
+        async def _history_handler(params: FunctionCallParams):
+            resp = await self.get_exam_history_and_comparison(context=params.context)
+            await params.result_callback(resp)
 
-        # Check if human participant already in room or wait for them
-        human_participants = [
-            p for p in ctx.room.remote_participants.values()
-            if not p.identity.startswith("agent-")
+        async def _transcript_handler(params: FunctionCallParams):
+            resp = await self.get_conversation_transcript(context=params.context)
+            await params.result_callback(resp)
+
+        return [
+            FunctionSchema(
+                name="evaluate_and_advance",
+                description="Evaluate the student's answer and advance the pedagogical graph.",
+                properties={
+                    "student_response": {
+                        "type": "string",
+                        "description": "Exact transcript of what the student said.",
+                    }
+                },
+                required=["student_response"],
+                handler=_eval_handler,
+            ),
+            FunctionSchema(
+                name="get_exam_progress",
+                description="Get current percentage progress in the syllabus.",
+                properties={},
+                required=[],
+                handler=_progress_handler,
+            ),
+            FunctionSchema(
+                name="get_session_summary",
+                description="Generate diagnostic review and grade summary.",
+                properties={},
+                required=[],
+                handler=_summary_handler,
+            ),
+            FunctionSchema(
+                name="pause_session",
+                description="Pause the examination session when student commands it.",
+                properties={
+                    "reason": {
+                        "type": "string",
+                        "description": "Reason for pausing.",
+                    }
+                },
+                required=[],
+                handler=_pause_handler,
+            ),
+            FunctionSchema(
+                name="resume_session",
+                description="Resume a paused examination session.",
+                properties={},
+                required=[],
+                handler=_resume_handler,
+            ),
+            FunctionSchema(
+                name="repeat_examination",
+                description="Restart the examination as a new attempt.",
+                properties={},
+                required=[],
+                handler=_repeat_handler,
+            ),
+            FunctionSchema(
+                name="get_exam_history_and_comparison",
+                description="Compare student performance across iterations.",
+                properties={},
+                required=[],
+                handler=_history_handler,
+            ),
+            FunctionSchema(
+                name="get_conversation_transcript",
+                description="Retrieve formatted conversation history.",
+                properties={},
+                required=[],
+                handler=_transcript_handler,
+            ),
         ]
-        if human_participants:
-            logger.info("Human participant already in room %s: %s", ctx.room.name, human_participants[0].identity)
-        else:
-            try:
-                participant = await ctx.wait_for_participant()
-                logger.info("Human participant connected to %s: %s (%s)", ctx.room.name, participant.identity, participant.name)
-            except Exception as err:
-                logger.warning("Error waiting for participant in direct test: %s", err)
 
-        # 1.5s buffer for mobile WebRTC track subscription & audio session stabilization
-        await asyncio.sleep(1.5)
 
-        greeting = "Ciao! Sono pronto. Questa è la modalità diretta ultra-veloce senza database. Di cosa vorresti parlare?"
-        if is_gemini_live_direct:
-            prompt = f'Avvia subito la conversazione salutando e pronunciando esattamente: "{greeting}"'
-            direct_session.generate_reply(user_input=prompt, allow_interruptions=True)
-        else:
-            handle = direct_session.say(greeting, allow_interruptions=True)
-            await handle
+async def create_examiner_pipeline(
+    transport: BaseTransport,
+    course_id: str | None = None,
+    is_direct_test: bool = False,
+) -> tuple[PipelineTask, OralExaminerAgent, PipelineRunner]:
+    """Factory creating a complete Pipecat real-time audio pipeline."""
+    from assessment.courses import CourseManager
 
-        # Keep job active until session shutdown or participant leaves
-        shutdown_fut = asyncio.Future[None]()
-        ctx.add_shutdown_callback(lambda: shutdown_fut.set_result(None) if not shutdown_fut.done() else None)
-        await shutdown_fut
-        return
-
+    CourseManager.ensure_directories()
     if not course_id:
         course_id = CourseManager.get_active_course_id()
-
     if not course_id:
-        existing_courses = CourseManager.list_courses()
-        if existing_courses:
-            course_id = existing_courses[0]["id"]
+        existing = CourseManager.list_courses()
+        if existing:
+            course_id = existing[0]["id"]
 
-    logger.info("Voice session for room %s bound to course: %s", ctx.room.name, course_id)
     CourseManager.set_active_course(course_id)
-
     course_dir = CourseManager.get_course_dir(course_id)
     state_path = course_dir / "state.json"
     plan_path = course_dir / "plan.json"
     events_path = course_dir / "events.jsonl"
 
-    if not plan_path.exists() and (CourseManager.DATA_DIR / "examination_plan.json").exists() and CourseManager.get_active_course_id() == course_id:
+    if (
+        not plan_path.exists()
+        and (CourseManager.DATA_DIR / "examination_plan.json").exists()
+        and CourseManager.get_active_course_id() == course_id
+    ):
         plan_path = CourseManager.DATA_DIR / "examination_plan.json"
-    elif not plan_path.exists() and Path("examination_plan.json").exists() and CourseManager.get_active_course_id() == course_id:
+    elif (
+        not plan_path.exists()
+        and Path("examination_plan.json").exists()
+        and CourseManager.get_active_course_id() == course_id
+    ):
         plan_path = Path("examination_plan.json")
 
-    # Register graceful shutdown callback
-    async def on_shutdown():
-        logger.info(
-            "Shutdown initiated for room %s (course %s). Saving session resources.",
-            ctx.room.name,
-            course_id,
-        )
-        try:
-            assessment_manager.record_event(
-                "SESSION_SHUTDOWN", {"room": ctx.room.name, "mode": execution_mode, "course_id": course_id}
-            )
-            # When interrupted or disconnected, keep session as PAUSED so it can be resumed
-            # seamlessly without spawning duplicate sessions or losing ongoing turns!
-            if assessment_manager.status != SessionStatus.COMPLETED:
-                assessment_manager.status = SessionStatus.PAUSED
-
-            target_save = course_dir / "state.json"
-            assessment_manager.save_session_state(target_save)
-
-            logger.info(
-                "Persisted paused state on shutdown for course %s: %d conversation turns saved.",
-                course_id,
-                len(assessment_manager.history),
-            )
-        except Exception as e:
-            logger.warning("Could not persist session state on shutdown: %s", e)
-
-    ctx.add_shutdown_callback(on_shutdown)
-
-    # Load active Examination Plan if available
-    plan_title = "esame orale"
+    # Load examination plan if present
     plan = None
+    plan_title = "esame orale"
     if plan_path.exists():
         try:
             from planning import ExaminationPlanner
 
             plan = ExaminationPlanner.load_plan_from_file(plan_path)
             plan_title = plan.title
-            logger.info("Loaded active ExaminationPlan for %s: %s", course_id, plan_title)
         except Exception as err:
-            logger.warning("Could not load examination plan from %s: %s", plan_path, err)
+            logger.warning("Could not load examination plan: %s", err)
 
-    # Initialize Graph & Vector stores for SessionAssessmentManager
-    g_store = create_graph_store(
-        "neo4j" if config.neo4j_uri != "bolt://localhost:7687" else "memory"
+    # Reuse the stores populated during plan generation, or restore course
+    # knowledge from disk when the API/agent process has restarted.
+    from assessment.knowledge import load_course_stores
+
+    material_path = course_dir / "material.md"
+    if not material_path.exists():
+        metadata_path = course_dir / "metadata.json"
+        if metadata_path.exists():
+            try:
+                material_path = Path(
+                    json.loads(metadata_path.read_text(encoding="utf-8")).get(
+                        "file_path", ""
+                    )
+                )
+            except (OSError, ValueError, TypeError):
+                logger.warning(
+                    "Could not resolve saved material for course %s", course_id
+                )
+    g_store, v_store = await load_course_stores(
+        course_id, plan=plan, material_path=material_path
     )
-    v_store = create_vector_store(
-        "qdrant" if config.qdrant_url != "http://localhost:6333" else "memory"
-    )
+
     assessment_manager = SessionAssessmentManager(
         graph_store=g_store,
         vector_store=v_store,
         examination_plan=plan,
         state_file_path=state_path,
         events_file_path=events_path,
-        execution_mode=execution_mode,
+        execution_mode="pipecat",
         course_id=course_id,
     )
 
-    # Check for existing session state for this document
     is_resumed_session = False
-
     if state_path.exists():
         try:
             assessment_manager.load_session_state(state_path)
-            # True resumption only when there are existing conversation turns
             if assessment_manager.history or assessment_manager.iterations_history:
                 is_resumed_session = True
                 assessment_manager.status = SessionStatus.ACTIVE
-                logger.info(
-                    "Resuming active discussion for course %s, concept %s with %d existing turns",
-                    course_id,
-                    assessment_manager.current_concept_id,
-                    len(assessment_manager.history),
-                )
         except Exception as err:
-            logger.warning("Could not restore existing session state from %s: %s", state_path, err)
+            logger.warning("Could not restore session state: %s", err)
 
-    # For brand-new documents or fully reset sessions, initialize starting state
     if not is_resumed_session:
-        logger.info(
-            "Initializing single discussion state for document: %s in room: %s",
-            plan_title,
-            ctx.room.name,
-        )
         assessment_manager.current_iteration = 1
         assessment_manager.history = []
         assessment_manager.consecutive_failures = 0
@@ -712,28 +561,28 @@ async def my_agent(ctx: JobContext):
                     assessment_manager.current_concept_id
                 ].status = PlanItemStatus.IN_PROGRESS
 
-    curr_cid = assessment_manager.current_concept_id
-    if curr_cid and plan and curr_cid in plan.items:
-        first_item = plan.items[curr_cid]
-    else:
-        first_item = plan.current_item if plan else None
-
-    first_q = (
-        first_item.planned_question.main_question
-        if first_item and hasattr(first_item, "planned_question") and hasattr(first_item.planned_question, "main_question")
-        else "Mi parli dei concetti fondamentali del corso."
-    )
-
     if is_resumed_session and assessment_manager.current_concept_id:
         curr_c = assessment_manager.current_concept_id.replace("_", " ").title()
         greeting = (
             f"Bentornato alla discussione su {plan_title}! "
             f"Eravamo rimasti all'argomento '{curr_c}'. Sei pronto a riprendere?"
         )
+        opening_rule = (
+            f"1. **Fase di Ripresa (One-time element):**\n"
+            f'   All\'avvio della connessione saluta dicendo unicamente: "{greeting}"\n'
+            f"   Aspetta che lo studente ti risponda confermando di voler procedere.\n"
+            f"   Non appena conferma, invoca IMMEDIATAMENTE `evaluate_and_advance` con la sua conferma.\n"
+        )
     else:
         greeting = (
             f"Buongiorno! Benvenuto alla simulazione di {plan_title}. "
             "Iniziamo con il primo argomento del documento. Sei pronto?"
+        )
+        opening_rule = (
+            f"1. **Fase di Apertura (One-time element):**\n"
+            f'   All\'avvio della sessione saluta dicendo unicamente: "{greeting}"\n'
+            f"   Aspetta che lo studente ti risponda confermando di voler procedere.\n"
+            f"   Non appena conferma, invoca IMMEDIATAMENTE `evaluate_and_advance` con la sua conferma.\n"
         )
 
     plan_topics_summary = ""
@@ -744,277 +593,175 @@ async def my_agent(ctx: JobContext):
             if cid in plan.items
         )
 
-    if is_resumed_session:
-        opening_rule = (
-            f"1. **Fase di Ripresa (One-time element):**\n"
-            f'   All\'avvio della connessione saluta e chiedi conferma per riprendere dicendo unicamente: "{greeting}"\n'
-            f"   Aspetta che lo studente ti risponda confermando di voler procedere (es. 'Sì', 'Procediamo', 'Sono pronto', 'Iniziamo').\n"
-            f"   Non appena conferma, invoca IMMEDIATAMENTE `evaluate_and_advance` con la sua conferma.\n"
-            f"   Pronuncia la domanda restituita nella DIRETTIVA PEDAGOGICA UNA SOLA VOLTA. NON anticipare la domanda prima della risposta dello strumento né ripeterla mai due volte!\n"
-        )
-    else:
-        opening_rule = (
-            f"1. **Fase di Apertura (One-time element):**\n"
-            f'   All\'avvio della sessione saluta e chiedi se lo studente è pronto dicendo unicamente: "{greeting}"\n'
-            f"   Aspetta che lo studente ti risponda confermando di voler procedere (es. 'Sì', 'Procediamo', 'Sono pronto', 'Iniziamo').\n"
-            f"   Non appena conferma, invoca IMMEDIATAMENTE `evaluate_and_advance` con la sua conferma.\n"
-            f"   Pronuncia la prima domanda restituita nella DIRETTIVA PEDAGOGICA UNA SOLA VOLTA. NON anticipare la domanda prima della risposta dello strumento né ripeterla mai due volte!\n"
-        )
-
     instructions = (
         f"**Persona:**\n"
         f"Sei la Docente Universitaria titolare del corso di '{plan_title}'. "
         f"Conduci l'esame orale simulato con tono autorevole, empatico, chiaro, calmo e naturale, ESCLUSIVAMENTE sui contenuti del corso.\n"
         f"RESPOND IN ITALIAN. YOU MUST RESPOND UNMISTAKABLY IN ITALIAN.\n\n"
-        f"**Costanza Vocale e Timbro (FONDAMENTALE):**\n"
-        f"- Mantieni SEMPRE rigorosamente la stessa identica voce, timbro, altezza (pitch), cadenza e volume durante tutta la discussione, sia all'avvio sia quando riprendi una sessione interrotta.\n"
-        f"- Il tuo tono deve rimanere immutato: pacato, professionale, accademico, naturale ed empatico da docente universitaria.\n"
-        f"- Non alterare MAI il tono di voce o la prosodia tra l'apertura e la ripresa o tra una domanda e l'altra.\n\n"
         f"**Conversational Rules:**\n"
         f"{opening_rule}"
-        f"2. **Fase di Interrogazione (Conversational loop):**\n"
-        f"   - Ad ogni turno, invoca IMMEDIATAMENTE `evaluate_and_advance` con la risposta esatta pronunciata dallo studente.\n"
-        f"   - Formula la tua risposta vocale allo studente basandoti sulla 'DIRETTIVA PEDAGOGICA' restituita dallo strumento.\n"
-        f"   - **ADAPTIVE SCAFFOLDING (Guida Personalizzata sulle Lacune):**\n"
-        f"     * Se lo studente è in difficoltà ma ha accennato a qualcosa di corretto: NON usare formule fisse né ripetere la domanda generale. Riconosci ciò che ha detto di buono e fagli una domanda guida mirata specificamente sulla parte che gli manca per completare il concetto.\n"
-        f"     * Se lo studente NON riesce a dare alcuna risposta o dichiara di non sapere nulla: fornisci un indizio generale o procedi con garbo all'argomento successivo previsto dal piano.\n"
-        f"     * Se lo studente chiede esplicitamente di cambiare domanda: passa immediatamente al nuovo argomento senza insistere.\n\n"
-        f"**Tool Invocations & Protocol Rules (Gemini 3.8 Live Conventions):**\n"
-        f"- Non eseguire MAI più di due chiamate consecutive a strumenti senza parlare ad alta voce allo studente.\n"
-        f"- Quando ricevi la risposta da uno strumento (status: ok), formula ed esprimi IMMEDIATAMENTE ad alta voce la 'DIRETTIVA PEDAGOGICA' per mantenere il dialogo naturale.\n"
-        f"- Non invocare mai due volte lo stesso strumento per il medesimo input dello studente.\n"
-        f"- Invoca `evaluate_and_advance(student_response=...)` ad ogni risposta dello studente per sincronizzarti con il piano d'esame.\n"
-        f"- Invoca `pause_session()` SOLO ED ESCLUSIVAMENTE se lo studente comanda esplicitamente di fermare l'esame o fare una pausa (es. 'facciamo una pausa', 'fermiamoci qui', 'voglio fermarmi'). NON invocarlo MAI se lo studente parla di argomenti tecnici (es. early stopping, bootstrap), se esita o se tace!\n"
-        f"- Invoca `resume_session()` se lo studente riprende la sessione sospesa.\n"
-        f"- Invoca `repeat_examination()` se lo studente chiede di ripetere l'esame da capo.\n"
-        f"- Invoca `get_exam_history_and_comparison()` se lo studente chiede il confronto con la prova precedente o lo storico.\n"
-        f"- Invoca `get_exam_progress()` se lo studente chiede a che punto si trova o quanti argomenti mancano.\n"
-        f"- Invoca `get_session_summary()` a fine esame o su richiesta di recap finale.\n\n"
-        f"**Programma del Corso (Sequenza Didattica):**\n"
+        f"2. **Fase di Interrogazione:**\n"
+        f"   - Ad ogni turno, invoca IMMEDIATAMENTE `evaluate_and_advance` con la risposta dello studente.\n"
+        f"   - Formula la tua risposta vocale basandoti sulla 'DIRETTIVA PEDAGOGICA' restituita dallo strumento.\n\n"
+        f"**Programma del Corso:**\n"
         f"{plan_topics_summary}\n\n"
         f"**Guardrails:**\n"
-        f"- ZERO ALLUCINAZIONI: Domande e verifiche devono riguardare esclusivamente il programma d'esame.\n"
-        f"- FORMATO VOCALE: Rispondi in testo semplice. Non usare MAI markdown, asterischi, elenchi puntati o emoji.\n"
-        f"- REGOLA ASSOLUTA CONTRO LE RIPETIZIONI (ZERO RIPETIZIONI):\n"
-        f"  * Non ripetere MAI la stessa identica domanda o direttiva due volte di seguito.\n"
-        f"  * Non porre mai la stessa domanda due volte nello stesso turno (né prima né dopo la chiamata allo strumento).\n"
-        f"  * Se hai già fatto una domanda, attendi la risposta dello studente o formula un indizio differente senza duplicare la frase precedente.\n"
-        f"- GESTIONE DEL SILENZIO:\n"
-        f"  * Se lo studente tace o riflette in silenzio, non ripetergli la domanda a raffica. Lasciagli qualche secondo per pensare con calma.\n"
-        f"- REGOLA CRITICA ZERO PAUSE ACCIDENTALI:\n"
-        f"  * Non mettere MAI in pausa la sessione a meno che lo studente non lo chieda con comandi espliciti e inequivocabili di interruzione.\n"
+        f"- Rispondi in testo semplice senza markdown né asterischi.\n"
+        f"- ZERO RIPETIZIONI: Non ripetere la stessa domanda due volte di seguito.\n"
     )
 
-    # Configure session based on pipeline mode
-    if config.pipeline_mode == "gemini_live":
-        custom_vocab = extract_custom_vocabulary(plan)
-        logger.info(
-            "Starting Gemini 3.8 Live speech-to-speech session with model %s, voice %s, custom_vocab terms: %d",
-            config.gemini_live_model,
-            config.gemini_voice,
-            len(custom_vocab),
+    agent_instance = OralExaminerAgent(
+        assessment_manager=assessment_manager,
+        instructions=instructions,
+    )
+    tools = agent_instance.get_tools_schema()
+
+    # Build Pipeline based on operational mode
+    is_gemini_live = config.pipeline_mode == "gemini_live"
+
+    if is_gemini_live:
+        gemini_model = (
+            config.gemini_live_model
+            if "/" in config.gemini_live_model
+            else f"models/{config.gemini_live_model}"
         )
-        realtime_model = google.realtime.RealtimeModel(
-            model=config.gemini_live_model,
-            voice=config.gemini_voice,
-            api_key=config.google_api_key or None,
-            instructions=instructions,
-            temperature=0.3,
-            input_audio_transcription=(
-                types.AudioTranscriptionConfig(custom_vocabulary=custom_vocab)
-                if custom_vocab
-                else types.AudioTranscriptionConfig()
+        if "gemini-3.8-live" in gemini_model:
+            # Fallback or standard Pipecat model identifier
+            gemini_model = "models/gemini-3.8-live"
+
+        llm_service = GeminiLiveLLMService(
+            api_key=config.google_api_key or os.getenv("GEMINI_API_KEY", ""),
+            settings=GeminiLiveLLMService.Settings(
+                model=gemini_model,
+                voice=config.gemini_voice,
+                language="it-IT",
+                system_instruction=instructions,
+                # Gemini's default end-of-speech wait is relatively long.
+                # 500 ms reduces turn latency while preserving natural pauses.
+                vad=GeminiVADParams(silence_duration_ms=500),
             ),
-            output_audio_transcription=types.AudioTranscriptionConfig(),
-            realtime_input_config=types.RealtimeInputConfig(
-                activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
-                automatic_activity_detection=types.AutomaticActivityDetection(
-                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
-                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
-                    prefix_padding_ms=100,
-                    silence_duration_ms=250,
-                ),
-                turn_coverage=types.TurnCoverage.TURN_INCLUDES_ONLY_ACTIVITY,
-            ),
-            context_window_compression=types.ContextWindowCompressionConfig(
-                sliding_window=types.SlidingWindow()
-            ),
+            tools=tools,
         )
-        session = AgentSession(llm=realtime_model)
-        agent_instance = OralExaminerAgent(
-            assessment_manager=assessment_manager,
-            examiner_llm=realtime_model,
-            instructions=instructions,
+        pipeline = Pipeline(
+            [
+                transport.input(),
+                llm_service,
+                transport.output(),
+            ]
         )
     else:
-        # Configure TTS instance: uses direct ElevenLabs plugin if custom API key is present, otherwise LiveKit Inference
-        if config.eleven_api_key:
-            logger.info(
-                "Using ElevenLabs plugin for custom voice ID: %s", config.tts_voice
-            )
-            tts_instance = elevenlabs.TTS(
-                voice_id=config.tts_voice,
-                model="eleven_turbo_v2_5",
-                api_key=config.eleven_api_key,
-                language=config.tts_language,
-                voice_settings=elevenlabs.VoiceSettings(
-                    stability=0.85,
-                    similarity_boost=0.90,
-                    style=0.0,
-                    use_speaker_boost=True,
+        # Cascaded STT -> LLM -> TTS pipeline
+        vad = SileroVADAnalyzer()
+
+        stt_service = DeepgramSTTService(
+            api_key=config.deepgram_api_key or "test_key",
+            settings=DeepgramSTTService.Settings(
+                language=config.stt_language
+                if config.stt_language != "multi"
+                else "it",
+            ),
+        )
+
+        context = LLMContext()
+        user_agg, asst_agg = LLMContextAggregatorPair(context)
+
+        if config.openai_api_key:
+            llm_proc = OpenAILLMService(
+                api_key=config.openai_api_key,
+                settings=OpenAILLMService.Settings(
+                    model="gpt-4o-mini",
+                    system_instruction=instructions,
                 ),
+                tools=tools,
             )
         else:
-            tts_instance = inference.TTS(
-                model=config.tts_primary_model,
+            llm_proc = LocalOrchestratedLLMService(
+                assessment_manager=assessment_manager
+            )
+
+        tts_service = ElevenLabsTTSService(
+            api_key=config.eleven_api_key or "test_key",
+            settings=ElevenLabsTTSService.Settings(
                 voice=config.tts_voice,
-                language=config.tts_language,
-                extra_kwargs={
-                    "stability": 0.85,
-                    "similarity_boost": 0.90,
-                    "style": 0.0,
-                    "use_speaker_boost": True,
-                    "apply_language_text_normalization": True,
-                },
-            )
-
-        # Configure STT instance: direct Deepgram plugin if API key present, else LiveKit Inference
-        if config.deepgram_api_key:
-            logger.info("Using Deepgram plugin directly for STT")
-            stt_instance = deepgram.STT(
-                api_key=config.deepgram_api_key,
-                language=config.stt_language,
-                endpointing=200,
-                interim_results=False,
-            )
-        else:
-            stt_instance = inference.STT(
-                model=config.stt_primary_model,
-                language=config.stt_language,
-                extra_kwargs={
-                    "no_delay": True,
-                    "endpointing": 200,
-                    "interim_results": False,
-                },
-                fallback=[{"model": config.stt_fallback_model}],
-            )
-
-        # High-performance, tuned cascaded STT->LLM->TTS pipeline for oral exam pacing
-        session = AgentSession(
-            stt=stt_instance,
-            tts=tts_instance,
-            turn_handling=TurnHandlingOptions(
-                # Multimodal acoustic & semantic turn detector
-                turn_detection=inference.TurnDetector(),
-                endpointing={
-                    "mode": "dynamic",
-                    "min_delay": 0.65,
-                    "max_delay": 2.5,
-                },
-                interruption={
-                    "mode": "adaptive",
-                    "min_duration": 0.25,
-                    "resume_false_interruption": False,
-                },
-                preemptive_generation={
-                    "enabled": True,
-                    "preemptive_tts": True,
-                },
-                expressive=True,
-            ),
-        )
-        agent_instance = OralExaminerAgent(
-            assessment_manager=assessment_manager,
-            instructions=instructions,
-        )
-
-    # Track conversation timestamps to measure student thinking latency
-    agent_instance.last_assistant_ts = asyncio.get_event_loop().time()
-
-    @session.on("conversation_item_added")
-    def _on_conversation_item_added(event) -> None:
-        now = asyncio.get_event_loop().time()
-        item = getattr(event, "item", event)
-        role = getattr(item, "role", None)
-        if role == "assistant":
-            agent_instance.last_assistant_ts = now
-
-    # Start session: for Gemini Live, native cloud-side noise cancellation and AEC are used.
-    # We avoid local CPU neural enhancement (ai_coustics) to eliminate latency and audio stuttering.
-    room_options = room_io.RoomOptions()
-    if config.pipeline_mode != "gemini_live":
-        room_options = room_io.RoomOptions(
-            audio_input=room_io.AudioInputOptions(
-                noise_cancellation=ai_coustics.audio_enhancement(
-                    model=ai_coustics.EnhancerModel.QUAIL_VF_S
-                ),
+                model="eleven_turbo_v2_5",
             ),
         )
 
-    # Join the room and connect to the user
-    await ctx.connect()
+        pipeline = Pipeline(
+            [
+                transport.input(),
+                vad,
+                stt_service,
+                user_agg,
+                llm_proc,
+                tts_service,
+                transport.output(),
+                asst_agg,
+            ]
+        )
 
-    # Automatically shut down this room's agent job when the student leaves
-    @ctx.room.on("participant_disconnected")
-    def on_participant_disconnected(participant: rtc.RemoteParticipant):
-        if participant.identity.startswith("agent-"):
-            return
-        remote_humans = [
-            p for p in ctx.room.remote_participants.values()
-            if not p.identity.startswith("agent-") and p.identity != participant.identity
-        ]
-        if not remote_humans:
-            logger.info(
-                "Student disconnected from room %s. Initiating graceful agent shutdown for course %s.",
-                ctx.room.name,
-                course_id,
-            )
-            ctx.shutdown()
-
-    # Start voice agent session on the connected room
-    await session.start(
-        agent=agent_instance,
-        room=ctx.room,
-        room_options=room_options,
+    task = PipelineTask(
+        pipeline,
+        params=PipelineParams(
+            allow_interruptions=True,
+            enable_metrics=True,
+        ),
     )
 
-    # Wait for the student participant to connect before speaking
-    try:
-        participant = await ctx.wait_for_participant()
-        logger.info(
-            "Student participant connected: %s (%s)",
-            participant.identity,
-            participant.name,
-        )
-    except Exception as e:
-        logger.warning("Error waiting for participant: %s", e)
+    runner = PipelineRunner()
 
-    # Persist initial session state asynchronously in background thread so greeting is not blocked
-    def _save_state_bg():
+    @transport.event_handler("on_client_connected")
+    async def on_client_connected(transport, client):
+        logger.info("Student connected to Pipecat session for course %s", course_id)
+        assessment_manager.last_ai_directive = greeting
+        if is_gemini_live:
+
+            async def queue_greeting_after_gemini_connects():
+                try:
+                    await _queue_opening_greeting(task, greeting)
+                    logger.info("Queued opening greeting for course %s", course_id)
+                except Exception as e:
+                    logger.warning("Error queuing opening greeting frame: %s", e)
+
+            # Do not block transport.start(): the Gemini processor receives
+            # StartFrame only after the client's on-connected callback returns.
+            asyncio.create_task(queue_greeting_after_gemini_connects())
+        else:
+            try:
+                await task.queue_frames([TextFrame(text=greeting)])
+            except Exception as e:
+                logger.warning("Error queuing opening greeting frame: %s", e)
+
+    @transport.event_handler("on_client_disconnected")
+    async def on_client_disconnected(transport, client):
+        logger.info(
+            "Student disconnected from Pipecat session for course %s", course_id
+        )
         try:
+            assessment_manager.record_event(
+                "SESSION_SHUTDOWN", {"mode": "pipecat", "course_id": course_id}
+            )
+            if assessment_manager.status != SessionStatus.COMPLETED:
+                assessment_manager.status = SessionStatus.PAUSED
             target_save = course_dir / "state.json"
             assessment_manager.save_session_state(target_save)
-        except Exception as err:
-            logger.warning("Could not save initial session state in background: %s", err)
+            logger.info("Saved paused session state on disconnect for %s", course_id)
+        except Exception as e:
+            logger.warning("Error saving session state on disconnect: %s", e)
+        await task.cancel()
 
-    asyncio.create_task(asyncio.to_thread(_save_state_bg))
-
-    # Opening greeting: allow 1.6s buffer for mobile WebRTC track subscription & audio session stabilization
-    assessment_manager.last_ai_directive = greeting
-    logger.info("Speaking opening greeting with 1.6s buffer: %s", greeting)
-    if config.pipeline_mode == "gemini_live":
-        await asyncio.sleep(1.6)
-        prompt = (
-            f'Lo studente si è appena collegato alla sessione. '
-            f'Avvia subito la conversazione salutando lo studente ad alta voce e pronunciando unicamente ed esattamente: "{greeting}"'
-        )
-        session.generate_reply(
-            user_input=prompt,
-            allow_interruptions=True,
-        )
-    else:
-        await session.say(greeting, allow_interruptions=True)
+    return task, agent_instance, runner
 
 
-if __name__ == "__main__":
-    cli.run_app(server)
+async def run_examiner_pipeline(
+    transport: BaseTransport,
+    course_id: str | None = None,
+    is_direct_test: bool = False,
+) -> None:
+    """Run an examiner session pipeline until client disconnects or completion."""
+    task, _agent, runner = await create_examiner_pipeline(
+        transport=transport,
+        course_id=course_id,
+        is_direct_test=is_direct_test,
+    )
+    await runner.run(task)

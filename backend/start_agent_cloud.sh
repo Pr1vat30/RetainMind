@@ -1,4 +1,4 @@
 #!/bin/bash
-# Avvia l'agente collegato al server LiveKit Cloud
-echo "☁️ Avvio Voice Agent collegato a LiveKit CLOUD..."
-LIVEKIT_MODE=cloud uv run python src/agent.py dev
+# Server unificato Pipecat: il voice agent WebRTC / WebSocket è servito direttamente dal server API
+echo "🚀 Avvio server vocale unificato Pipecat..."
+./start_api_server.sh

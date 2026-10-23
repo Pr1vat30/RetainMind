@@ -1,4 +1,4 @@
-"""Configuration management for LiveKit Voice Agent and RAG assessment pipeline.
+"""Configuration management for the Pipecat voice agent and RAG assessment pipeline.
 
 Loads settings from `.env.local` (priority) or `.env` and provides a typed,
 frozen dataclass with defaults for all pipeline modes (Gemini Live speech-to-speech,
@@ -70,11 +70,24 @@ class VoiceAgentConfig:
     )
 
     # -------------------------------------------------------------------------
+    # Pipecat & WebRTC / WebSocket Transport Configuration
+    # -------------------------------------------------------------------------
+    webrtc_mode: str = os.getenv(
+        "WEBRTC_MODE", "smallwebrtc"
+    )  # "smallwebrtc" | "livekit"
+    webrtc_stun_servers: tuple[str, ...] = ("stun:stun.l.google.com:19302",)
+    ws_sample_rate: int = int(os.getenv("WS_SAMPLE_RATE", "16000"))
+    audio_sample_rate: int = int(os.getenv("AUDIO_SAMPLE_RATE", "24000"))
+
+    # -------------------------------------------------------------------------
     # Google Gemini Live API Configuration
     # -------------------------------------------------------------------------
     gemini_live_model: str = os.getenv("GEMINI_LIVE_MODEL", "gemini-3.8-live")
     gemini_voice: str = os.getenv("GEMINI_VOICE", "Aoede")
     google_api_key: str = os.getenv("GOOGLE_API_KEY", "")
+    plan_generation_model: str = os.getenv(
+        "PLAN_GENERATION_MODEL", "gemini-3.5-flash-lite"
+    )
 
     # -------------------------------------------------------------------------
     # Direct Provider API Keys

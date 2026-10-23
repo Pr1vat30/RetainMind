@@ -104,6 +104,31 @@ L'entropia definisce la freccia del tempo nei sistemi termodinamici.
 
 
 @pytest.mark.asyncio
+async def test_ingestion_pipeline_defaults_to_configured_plan_model():
+    from config import config
+
+    selected_models = []
+
+    class CapturingExtractor:
+        def extract_with_llm(self, *, chunks, model):
+            selected_models.append(model)
+            return [], [], []
+
+    pipeline = IngestionPipeline(
+        vector_store=InMemoryVectorStore(),
+        graph_store=InMemoryGraphStore(),
+        extractor=CapturingExtractor(),
+    )
+
+    await pipeline.ingest_document(
+        content="# Corso\nMateriale didattico del corso.",
+        document_id="course_model_default",
+    )
+
+    assert selected_models == [config.plan_generation_model]
+
+
+@pytest.mark.asyncio
 async def test_pdf_parsing_and_file_ingestion(tmp_path):
     from pypdf import PdfWriter
 
@@ -159,7 +184,9 @@ def test_clean_and_parse_json_resilience():
     assert "Prima riga" in parsed1["description"]
 
     # 2. Trailing commas in arrays and objects
-    raw_with_trailing_commas = '{\n  "title": "Data Science",\n  "tags": ["ml", "ai", ],\n}'
+    raw_with_trailing_commas = (
+        '{\n  "title": "Data Science",\n  "tags": ["ml", "ai", ],\n}'
+    )
     parsed2 = KnowledgeExtractor._clean_and_parse_json(raw_with_trailing_commas)
     assert parsed2["title"] == "Data Science"
     assert len(parsed2["tags"]) == 2
@@ -168,4 +195,3 @@ def test_clean_and_parse_json_resilience():
     raw_markdown = '```json\n{\n  "title": "Fenced Block"\n}\n```'
     parsed3 = KnowledgeExtractor._clean_and_parse_json(raw_markdown)
     assert parsed3["title"] == "Fenced Block"
-

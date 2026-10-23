@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from assessment.knowledge import get_registered_course_stores
 from assessment.report import SessionReportGenerator
 from assessment.state import (
     SessionAssessmentManager,
@@ -50,30 +51,28 @@ class SessionService:
         self.course_id = target_course_id
         self._custom_state_path = state_file_path is not None
         self.state_file_path = (
-            Path(state_file_path)
-            if state_file_path is not None
-            else default_state
+            Path(state_file_path) if state_file_path is not None else default_state
         )
         self.plan_file_path = (
-            Path(plan_file_path)
-            if plan_file_path is not None
-            else default_plan
+            Path(plan_file_path) if plan_file_path is not None else default_plan
         )
         self.events_file_path = (
-            Path(events_file_path)
-            if events_file_path is not None
-            else default_events
+            Path(events_file_path) if events_file_path is not None else default_events
         )
         self.execution_mode = execution_mode
 
     def _load_manager(self) -> SessionAssessmentManager:
         """Helper to instantiate SessionAssessmentManager with existing state and graph stores."""
-        g_store = create_graph_store(
-            "neo4j" if config.neo4j_uri != "bolt://localhost:7687" else "memory"
-        )
-        v_store = create_vector_store(
-            "qdrant" if config.qdrant_url != "http://localhost:6333" else "memory"
-        )
+        stores = get_registered_course_stores(self.course_id)
+        if stores:
+            g_store, v_store = stores
+        else:
+            g_store = create_graph_store(
+                "neo4j" if config.neo4j_uri != "bolt://localhost:7687" else "memory"
+            )
+            v_store = create_vector_store(
+                "qdrant" if config.qdrant_url != "http://localhost:6333" else "memory"
+            )
 
         plan = None
         if self.plan_file_path.exists():
@@ -128,16 +127,26 @@ class SessionService:
             items = plan_data.get("items") or {}
             curr_question = ""
             if curr_cid and curr_cid in items:
-                curr_question = items[curr_cid].get("planned_question", {}).get("main_question", "")
+                curr_question = (
+                    items[curr_cid].get("planned_question", {}).get("main_question", "")
+                )
             if not curr_question and self.plan_file_path.exists():
                 try:
                     p_data = json.loads(self.plan_file_path.read_text(encoding="utf-8"))
                     p_items = p_data.get("items") or {}
                     if curr_cid and curr_cid in p_items:
-                        curr_question = p_items[curr_cid].get("planned_question", {}).get("main_question", "")
+                        curr_question = (
+                            p_items[curr_cid]
+                            .get("planned_question", {})
+                            .get("main_question", "")
+                        )
                     elif not curr_cid and p_data.get("concept_order"):
                         first_cid = p_data["concept_order"][0]
-                        curr_question = p_items.get(first_cid, {}).get("planned_question", {}).get("main_question", "")
+                        curr_question = (
+                            p_items.get(first_cid, {})
+                            .get("planned_question", {})
+                            .get("main_question", "")
+                        )
                 except Exception:
                     pass
 
@@ -148,9 +157,13 @@ class SessionService:
                 "current_iteration": state_data.get("current_iteration", 1),
                 "current_concept_id": state_data.get("current_concept_id"),
                 "current_question": curr_question,
-                "pedagogical_state": state_data.get("current_pedagogical_state", "EXPLORATION"),
+                "pedagogical_state": state_data.get(
+                    "current_pedagogical_state", "EXPLORATION"
+                ),
                 "turns_in_current_iteration": len(state_data.get("history", [])),
-                "total_iterations_completed": len(state_data.get("iterations_history", [])),
+                "total_iterations_completed": len(
+                    state_data.get("iterations_history", [])
+                ),
                 "plan_progress_percentage": plan_data.get("progress_percentage", 0.0),
                 "plan_step": f"{curr_idx}/{total_items}" if total_items else "N/A",
                 "deferred_queue": deferred,
@@ -177,11 +190,17 @@ class SessionService:
             curr_q_fallback = ""
             if manager.examination_plan and manager.current_concept_id:
                 item = manager.examination_plan.items.get(manager.current_concept_id)
-                if item and hasattr(item, "planned_question") and hasattr(item.planned_question, "main_question"):
+                if (
+                    item
+                    and hasattr(item, "planned_question")
+                    and hasattr(item.planned_question, "main_question")
+                ):
                     curr_q_fallback = item.planned_question.main_question
             elif manager.examination_plan and manager.examination_plan.current_item:
                 item = manager.examination_plan.current_item
-                if hasattr(item, "planned_question") and hasattr(item.planned_question, "main_question"):
+                if hasattr(item, "planned_question") and hasattr(
+                    item.planned_question, "main_question"
+                ):
                     curr_q_fallback = item.planned_question.main_question
 
             return {
@@ -271,8 +290,16 @@ class SessionService:
 
         cid = (
             self.course_id
-            or (manager.examination_plan.document_id if manager.examination_plan and manager.examination_plan.document_id else None)
-            or (self.state_file_path.parent.name if self.state_file_path.parent.name not in ("data", "backend") else None)
+            or (
+                manager.examination_plan.document_id
+                if manager.examination_plan and manager.examination_plan.document_id
+                else None
+            )
+            or (
+                self.state_file_path.parent.name
+                if self.state_file_path.parent.name not in ("data", "backend")
+                else None
+            )
             or "default"
         )
 
@@ -589,7 +616,9 @@ class SessionService:
 
         return events[-limit:] if limit > 0 else events
 
-    async def start_new_discussion(self, course_id: str | None = None) -> dict[str, Any]:
+    async def start_new_discussion(
+        self, course_id: str | None = None
+    ) -> dict[str, Any]:
         """Starts a completely fresh, isolated discussion on the current document plan.
         Archives any existing discussion if it had turns or was active, resets BKT mastery,
         and generates a clean, unique room name for LiveKit.

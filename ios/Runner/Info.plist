@@ -67,7 +67,7 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 
-	<!-- LiveKit WebRTC Microphone Permission -->
+	<!-- Microphone permission for Pipecat voice sessions -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>RetainMind richiede l'accesso al microfono per sostenere l'esame orale con il docente AI.</string>
 

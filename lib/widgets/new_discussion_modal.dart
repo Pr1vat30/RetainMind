@@ -58,6 +58,8 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
   int? _selectedFileSize;
   bool _isUploading = false;
   String? _errorMessage;
+  String _selectedLevel = 'intermedio';
+  int _selectedDuration = 20;
 
   final List<String> _suggestedAiTopics = [
     'Diritto Costituzionale: Il Parlamento',
@@ -227,10 +229,63 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
       });
 
       try {
-        await exam.generateExamFromTopicAndStartNewDiscussion(
+        final generated = await exam.generateExamFromTopic(
           topic: topic,
           title: title.isNotEmpty ? title : null,
+          level: _selectedLevel,
+          durationMinutes: _selectedDuration,
         );
+
+        if (!mounted) return;
+        final concepts = (generated['concepts'] as List<dynamic>? ?? const [])
+            .map((item) => item is Map ? item['concept_name']?.toString() : null)
+            .whereType<String>()
+            .toList();
+        final preview = generated['material_preview']?.toString() ?? '';
+        final shouldStart = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text('Piano pronto: ${generated['title'] ?? title}'),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Livello $_selectedLevel · $_selectedDuration minuti'),
+                    const SizedBox(height: 12),
+                    Text('Argomenti (${concepts.length})', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    ...concepts.map((concept) => Padding(
+                          padding: const EdgeInsets.only(bottom: 3),
+                          child: Text('• $concept'),
+                        )),
+                    const SizedBox(height: 14),
+                    const Text('Dispensa generata dall’IA. Controlla che sia coerente con il tuo programma:', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text(preview),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Esamina più tardi'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Avvia interrogazione'),
+              ),
+            ],
+          ),
+        );
+
+        if (shouldStart != true) {
+          if (mounted) Navigator.of(context).pop();
+          return;
+        }
+        await exam.startExam(courseId: generated['course_id'] as String?);
 
         if (mounted) {
           final nav = Navigator.of(context);
@@ -794,6 +849,72 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
                         ),
                         prefixIcon: Icon(Icons.school_rounded, color: colors.textSecondary, size: 18),
                       ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            initialValue: _selectedLevel,
+                            decoration: InputDecoration(
+                              labelText: 'Livello',
+                              filled: true,
+                              fillColor: colors.surfaceContainerHigh,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(AppConstants.radiusMd),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'base', child: Text('Base')),
+                              DropdownMenuItem(value: 'intermedio', child: Text('Intermedio')),
+                              DropdownMenuItem(value: 'avanzato', child: Text('Avanzato')),
+                            ],
+                            onChanged: _isUploading
+                                ? null
+                                : (value) {
+                                    if (value != null) {
+                                      setState(() => _selectedLevel = value);
+                                    }
+                                  },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            initialValue: _selectedDuration,
+                            decoration: InputDecoration(
+                              labelText: 'Durata',
+                              filled: true,
+                              fillColor: colors.surfaceContainerHigh,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(AppConstants.radiusMd),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                            items: const [10, 20, 30, 45, 60]
+                                .map((minutes) => DropdownMenuItem(
+                                      value: minutes,
+                                      child: Text('$minutes min'),
+                                    ))
+                                .toList(),
+                            onChanged: _isUploading
+                                ? null
+                                : (value) {
+                                    if (value != null) {
+                                      setState(() => _selectedDuration = value);
+                                    }
+                                  },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'L’IA prepara una dispensa sintetica e un piano su questo tema. Per risultati più fedeli al programma del corso, carica i tuoi materiali.',
+                      style: TextStyle(color: colors.textTertiary, fontSize: 11.5, height: 1.35),
                     ),
 
                     const SizedBox(height: 16),

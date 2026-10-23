@@ -172,6 +172,8 @@ class ResponseEvaluator:
         ground_truth: Sequence[GroundTruthPassage],
         contrasting_concepts: Sequence[ConceptNode] | None = None,
         pause_duration: float = 0.0,
+        expected_key_points: Sequence[str] | None = None,
+        ideal_answer: str = "",
     ) -> EvaluationDetail:
         """Lightweight dual-path evaluation classifying student's oral response.
 
@@ -209,7 +211,16 @@ class ResponseEvaluator:
                 if cw.name.lower() in resp_lower or cw.id.lower() in resp_lower:
                     contrasting_matches.append(cw.name)
 
-        if contrasting_matches:
+        target_terms = {
+            token
+            for token in re.findall(r"\w+", target_concept.name.lower())
+            if token not in STOP_WORDS and len(token) > 2
+        }
+        target_mentioned = any(
+            token in resp_lower or (len(token) >= 4 and token[:4] in resp_lower)
+            for token in target_terms
+        )
+        if contrasting_matches and not target_mentioned:
             return EvaluationDetail(
                 evaluation_result=EvaluationResultType.MISCONCEPTION,
                 assessed_concept_id=target_concept.id,
@@ -236,7 +247,11 @@ class ResponseEvaluator:
 
         # 4. Multi-Faceted Semantic & Ground-Truth Matching
         gt_corpus = " ".join([gt.text.lower() for gt in ground_truth])
-        full_reference_text = f"{target_concept.name.lower()} {target_concept.summary.lower()} {gt_corpus}"
+        rubric_text = " ".join(expected_key_points or [])
+        full_reference_text = (
+            f"{target_concept.name.lower()} {target_concept.summary.lower()} "
+            f"{ideal_answer.lower()} {rubric_text.lower()} {gt_corpus}"
+        )
 
         ref_words = set(re.findall(r"\w+", full_reference_text))
         meaningful_ref_terms = {
@@ -266,6 +281,35 @@ class ResponseEvaluator:
         total_content_words = len(meaningful_resp_words)
         covered_aspects_list = sorted(matched_resp_words)
         uncovered_aspects_list = sorted(meaningful_ref_terms - matched_ref_terms)[:6]
+
+        # The plan rubric is more useful than whole-document keyword overlap.
+        # A point counts only when its meaningful terms are represented in the
+        # student's own answer, so copying the ideal answer still needs application.
+        rubric_coverage = 1.0
+        if expected_key_points:
+            covered_points = 0
+            for point in expected_key_points:
+                point_terms = {
+                    token
+                    for token in re.findall(r"\w+", point.lower())
+                    if token not in STOP_WORDS and len(token) > 2
+                }
+                point_coverage = sum(
+                    1
+                    for point_term in point_terms
+                    if any(
+                        response_term == point_term
+                        or (
+                            len(response_term) >= 4
+                            and len(point_term) >= 4
+                            and response_term[:4] == point_term[:4]
+                        )
+                        for response_term in meaningful_resp_words
+                    )
+                )
+                if point_terms and point_coverage / len(point_terms) >= 0.5:
+                    covered_points += 1
+            rubric_coverage = covered_points / len(expected_key_points)
 
         # Check for textbook verbatim repetition (MEMORIZED)
         is_verbatim = False
@@ -297,7 +341,7 @@ class ResponseEvaluator:
 
         # ACCURATE: Student provides a coherent explanation articulating the technical mechanism
         # Requires: At least 3 distinct conceptual terms AND at least 6 meaningful content words (or dense coverage on short concepts)
-        is_accurate = (
+        is_accurate = (not expected_key_points or rubric_coverage >= 0.6) and (
             (total_semantic_matches >= 3 and total_content_words >= 6)
             or (
                 total_semantic_matches >= 2

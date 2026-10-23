@@ -125,10 +125,39 @@ SKIP_REQUEST_PHRASES: frozenset[str] = frozenset(
         "salta",
         "passa avanti",
         "cambia argomento",
-        "non la so",
         "non lo so, passa",
         "un'altra domanda",
         "un altra domanda",
+    }
+)
+
+SKIP_CONFIRMATION_YES: frozenset[str] = frozenset(
+    {
+        "sì",
+        "si",
+        "sì, cambiamo",
+        "si cambiamo",
+        "cambiamo argomento",
+        "passiamo oltre",
+        "andiamo avanti",
+        "saltiamo",
+        "sì, passiamo",
+        "si passiamo",
+        "va bene, cambiamo",
+    }
+)
+SKIP_CONFIRMATION_NO: frozenset[str] = frozenset(
+    {
+        "no",
+        "no, riprovo",
+        "no riprovo",
+        "voglio riprovare",
+        "riproviamo",
+        "restiamo su questo",
+        "continuiamo su questo",
+        "spiegami meglio",
+        "dammi un indizio",
+        "aiutami",
     }
 )
 
@@ -285,6 +314,7 @@ class SessionAssessmentManager:
         self.consecutive_failures: int = 0
         self.history: list[dict[str, Any]] = []
         self.last_turn_assessment: TurnAssessmentState | None = None
+        self.pending_skip_confirmation: str | None = None
         self.last_ai_directive: str = ""
         self._last_context: ExaminerContext | None = None
         self._last_processed_transcript: str = ""
@@ -405,7 +435,10 @@ class SessionAssessmentManager:
 
             # Ignore noise, empty utterances, or silence placeholders like '-' without advancing the exam or recording history
             if is_silence_or_noise(clean_text):
-                logger.info("Ignoring silence/noise utterance ('%s') without recording turn", clean_text)
+                logger.info(
+                    "Ignoring silence/noise utterance ('%s') without recording turn",
+                    clean_text,
+                )
                 if self._last_context and self.last_turn_assessment:
                     return self._last_context, self.last_turn_assessment
                 if not self.current_concept_id:
@@ -414,15 +447,19 @@ class SessionAssessmentManager:
                         assessed_concept_id=self.current_concept_id or "general",
                         evaluation_result=EvaluationResultType.HESITANT,
                     )
-                current_concept = await self.graph_store.get_concept(self.current_concept_id)
-                c_name = current_concept.name if current_concept else self.current_concept_id
+                current_concept = await self.graph_store.get_concept(
+                    self.current_concept_id
+                )
+                c_name = (
+                    current_concept.name if current_concept else self.current_concept_id
+                )
                 wait_ctx = ExaminerContext(
-                    concept_id=self.current_concept_id,
-                    concept_name=c_name,
+                    current_concept=current_concept
+                    or ConceptNode(id=self.current_concept_id, name=c_name, summary=""),
                     pedagogical_state=self.current_pedagogical_state,
-                    pedagogical_directive=self.last_ai_directive or f"Mi parli di {c_name}.",
+                    pedagogical_directive=self.last_ai_directive
+                    or f"Mi parli di {c_name}.",
                     ground_truth_chunks=[],
-                    metadata={"silence": True},
                 )
                 return wait_ctx, TurnAssessmentState(
                     assessed_concept_id=self.current_concept_id,
@@ -448,7 +485,9 @@ class SessionAssessmentManager:
             msg_lower = clean_text.lower().strip()
 
             if is_explicit_pause_request(clean_text):
-                logger.info("Explicit pause request detected from student: '%s'", clean_text)
+                logger.info(
+                    "Explicit pause request detected from student: '%s'", clean_text
+                )
                 return await self.pause_session()
 
             is_repeat_request = any(
@@ -510,6 +549,11 @@ class SessionAssessmentManager:
                         concept_id_filter=current_concept.id,
                     ),
                 )
+                if not gt_chunks:
+                    gt_chunks = await self.vector_store.search(
+                        query=f"{current_concept.name} {current_concept.summary}",
+                        limit=3,
+                    )
                 self._concept_context_cache[concept_id] = (
                     prereqs,
                     causal_targets,
@@ -519,25 +563,188 @@ class SessionAssessmentManager:
                     gt_chunks,
                 )
 
+            # A request to change topic is a choice, not an answer to the exam
+            # question. Handle it before evaluation so it cannot be scored as VAGUE.
+            if self.pending_skip_confirmation == concept_id and self.examination_plan:
+                normalized_reply = re.sub(r"[^\w\sàèéìòù]", " ", msg_lower)
+                normalized_reply = " ".join(normalized_reply.split())
+                reply_words = set(normalized_reply.split())
+                wants_to_skip = normalized_reply in SKIP_CONFIRMATION_YES or (
+                    not reply_words.intersection({"no", "non"})
+                    and bool(
+                        reply_words.intersection(
+                            {"sì", "si", "cambiamo", "passiamo", "saltiamo"}
+                        )
+                    )
+                )
+                wants_to_continue = (
+                    normalized_reply in SKIP_CONFIRMATION_NO
+                    or normalized_reply.startswith("no ")
+                    or normalized_reply == "no"
+                    or bool(
+                        reply_words.intersection(
+                            {
+                                "riprovo",
+                                "riproviamo",
+                                "riprovare",
+                                "indizio",
+                                "aiutami",
+                                "continuiamo",
+                                "restiamo",
+                                "restare",
+                                "spiegami",
+                            }
+                        )
+                    )
+                )
+                if wants_to_continue:
+                    wants_to_skip = False
+                plan_item = self.examination_plan.items.get(concept_id)
+
+                if wants_to_skip and plan_item:
+                    self.pending_skip_confirmation = None
+                    self.examination_plan.defer_concept(
+                        concept_id=concept_id, required_correct_answers=2
+                    )
+                    next_item = self.examination_plan.advance_to_next()
+                    if next_item:
+                        next_concept_id = next_item.concept_id
+                        next_state = PedagogicalState.EXPLORATION
+                        spoken_directive = (
+                            f"Va bene, lo riprendiamo più avanti. Passiamo a "
+                            f"{next_item.concept_name}: {next_item.planned_question.main_question}"
+                        )
+                        relation = "PLAN_CONFIRMED_SKIP"
+                    else:
+                        next_concept_id = concept_id
+                        next_state = PedagogicalState.SYNTHESIS
+                        spoken_directive = (
+                            "Va bene, segno questo argomento per riprenderlo più avanti. "
+                            "Abbiamo terminato gli altri argomenti previsti."
+                        )
+                        relation = "PLAN_CONFIRMED_SKIP_COMPLETED"
+                    new_context = await self.retriever.retrieve_context_for_concept(
+                        concept_id=next_concept_id, pedagogical_state=next_state
+                    )
+                    new_context.pedagogical_directive = spoken_directive
+                    result = (
+                        self.last_turn_assessment.evaluation_result
+                        if self.last_turn_assessment
+                        else EvaluationResultType.VAGUE
+                    )
+                    turn_assessment = TurnAssessmentState(
+                        assessed_concept_id=concept_id,
+                        evaluation_result=result,
+                        mastery_delta=0.0,
+                        next_target_node=next_concept_id,
+                        graph_relation_followed=relation,
+                    )
+                elif wants_to_continue and plan_item:
+                    self.pending_skip_confirmation = None
+                    plan_item.current_attempt = 0
+                    next_concept_id = concept_id
+                    next_state = PedagogicalState.SCAFFOLDING
+                    hint = (
+                        plan_item.planned_question.scaffolding_hints[0]
+                        if plan_item.planned_question.scaffolding_hints
+                        else plan_item.planned_question.main_question
+                    )
+                    spoken_directive = f"Certo, restiamo su questo argomento. Ti do un piccolo aiuto: {hint}"
+                    new_context = ExaminerContext(
+                        current_concept=current_concept,
+                        pedagogical_state=next_state,
+                        ground_truth_chunks=gt_chunks,
+                        prerequisites=prereqs,
+                        causal_targets=causal_targets,
+                        contrasting_concepts=contrasting,
+                        multi_hop_concepts=multi_hop,
+                        all_graph_concepts=all_concepts,
+                        pedagogical_directive=spoken_directive,
+                    )
+                    result = (
+                        self.last_turn_assessment.evaluation_result
+                        if self.last_turn_assessment
+                        else EvaluationResultType.VAGUE
+                    )
+                    turn_assessment = TurnAssessmentState(
+                        assessed_concept_id=concept_id,
+                        evaluation_result=result,
+                        mastery_delta=0.0,
+                        next_target_node=concept_id,
+                        graph_relation_followed="PLAN_CONTINUE_AFTER_CONFIRMATION",
+                    )
+                else:
+                    next_concept_id = concept_id
+                    next_state = self.current_pedagogical_state
+                    spoken_directive = (
+                        "Mi sembra che questo punto sia ancora un po' incerto. Vuoi "
+                        "passare al prossimo argomento e tornarci più avanti? Se preferisci, "
+                        "restiamo qui e ti do un indizio."
+                    )
+                    new_context = ExaminerContext(
+                        current_concept=current_concept,
+                        pedagogical_state=next_state,
+                        ground_truth_chunks=gt_chunks,
+                        prerequisites=prereqs,
+                        causal_targets=causal_targets,
+                        contrasting_concepts=contrasting,
+                        multi_hop_concepts=multi_hop,
+                        all_graph_concepts=all_concepts,
+                        pedagogical_directive=spoken_directive,
+                    )
+                    turn_assessment = TurnAssessmentState(
+                        assessed_concept_id=concept_id,
+                        evaluation_result=(
+                            self.last_turn_assessment.evaluation_result
+                            if self.last_turn_assessment
+                            else EvaluationResultType.VAGUE
+                        ),
+                        mastery_delta=0.0,
+                        next_target_node=concept_id,
+                        graph_relation_followed="PLAN_SKIP_CONFIRMATION_PENDING",
+                    )
+
+                self.current_concept_id = next_concept_id
+                self.current_pedagogical_state = next_state
+                self.last_ai_directive = spoken_directive
+                self.last_turn_assessment = turn_assessment
+                self._last_context = new_context
+                self.record_event(
+                    "PLAN_SKIP_CONFIRMATION",
+                    {
+                        "reply": clean_text,
+                        "decision": turn_assessment.graph_relation_followed,
+                    },
+                )
+                self.save_session_state(self.state_file_path)
+                return new_context, turn_assessment
+
             # Check if student is confirming readiness (initial opening Turn 0 or session resumption)
             words = set(re.findall(r"\w+", msg_lower))
             is_initial_turn = len(self.history) == 0
             is_last_turn_resumption = bool(
                 self.history
                 and (
-                    self.history[-1].get("evaluation") in ("RESUMED", "READINESS_CONFIRMED")
-                    or "[session_resumed]" in str(self.history[-1].get("transcript", "")).lower()
+                    self.history[-1].get("evaluation")
+                    in ("RESUMED", "READINESS_CONFIRMED")
+                    or "[session_resumed]"
+                    in str(self.history[-1].get("transcript", "")).lower()
                 )
             )
             is_ai_asking_readiness = bool(
                 self.last_ai_directive
-                and ("pronto" in self.last_ai_directive.lower() or "iniziamo" in self.last_ai_directive.lower())
+                and (
+                    "pronto" in self.last_ai_directive.lower()
+                    or "iniziamo" in self.last_ai_directive.lower()
+                )
             )
 
             is_affirmative_readiness = (
                 len(words) <= 6
                 and bool(words.intersection(AFFIRMATIVE_READINESS_WORDS))
-                and (is_initial_turn or is_last_turn_resumption or is_ai_asking_readiness)
+                and (
+                    is_initial_turn or is_last_turn_resumption or is_ai_asking_readiness
+                )
             )
             is_explicit_resume_cmd = (
                 clean_text.lower() in RESUME_REQUEST_PHRASES
@@ -547,12 +754,19 @@ class SessionAssessmentManager:
             if is_affirmative_readiness or is_explicit_resume_cmd:
                 curr_item = (
                     self.examination_plan.items.get(concept_id)
-                    if self.examination_plan and concept_id in self.examination_plan.items
-                    else (self.examination_plan.current_item if self.examination_plan else None)
+                    if self.examination_plan
+                    and concept_id in self.examination_plan.items
+                    else (
+                        self.examination_plan.current_item
+                        if self.examination_plan
+                        else None
+                    )
                 )
                 curr_q = (
                     curr_item.planned_question.main_question
-                    if curr_item and hasattr(curr_item, "planned_question") and hasattr(curr_item.planned_question, "main_question")
+                    if curr_item
+                    and hasattr(curr_item, "planned_question")
+                    and hasattr(curr_item.planned_question, "main_question")
                     else f"Mi parli dei concetti fondamentali relativi a {current_concept.name}."
                 )
                 spoken_directive = (
@@ -577,7 +791,9 @@ class SessionAssessmentManager:
                     evaluation_result=EvaluationResultType.ACCURATE,
                     mastery_delta=0.0,
                     next_target_node=concept_id,
-                    graph_relation_followed="PLAN_START" if is_initial_turn else "PLAN_RESUME",
+                    graph_relation_followed="PLAN_START"
+                    if is_initial_turn
+                    else "PLAN_RESUME",
                     uncertainty_signals={
                         "pause_duration": pause_duration,
                         "filler_words": 0,
@@ -624,12 +840,24 @@ class SessionAssessmentManager:
                 return new_context, turn_assessment
 
             # 1. Evaluate student's response
+            active_plan_item = (
+                self.examination_plan.items.get(concept_id)
+                if self.examination_plan
+                else None
+            )
+            active_question = (
+                active_plan_item.planned_question if active_plan_item else None
+            )
             eval_detail: EvaluationDetail = self.evaluator.evaluate_response(
                 student_response=clean_text,
                 target_concept=current_concept,
                 ground_truth=gt_chunks,
                 contrasting_concepts=contrasting,
                 pause_duration=pause_duration,
+                expected_key_points=(
+                    active_question.expected_key_points if active_question else None
+                ),
+                ideal_answer=active_question.ideal_answer if active_question else "",
             )
 
         # 2. Bayesian Knowledge Tracing & Graph Mastery Update
@@ -671,13 +899,20 @@ class SessionAssessmentManager:
                 }
             )
 
-            is_success = eval_detail.evaluation_result in (
-                EvaluationResultType.ACCURATE,
-                EvaluationResultType.MEMORIZED,
-            )
-            max_attempts = plan_item.planned_question.max_attempts
+            is_success = eval_detail.evaluation_result == EvaluationResultType.ACCURATE
+            # Existing saved plans may still contain the previous default of two.
+            max_attempts = max(3, plan_item.planned_question.max_attempts)
 
-            if is_success:
+            if plan_item.planned_question.stress_test_questions and (
+                eval_detail.evaluation_result == EvaluationResultType.MEMORIZED
+                or (is_success and not plan_item.stress_test_pending)
+            ):
+                plan_item.stress_test_pending = True
+                next_concept_id = concept_id
+                next_state = PedagogicalState.STRESS_TEST
+                relation_followed = "PLAN_STRESS_TEST"
+            elif is_success:
+                plan_item.stress_test_pending = False
                 plan_item.status = PlanItemStatus.MASTERED
                 self.consecutive_failures = 0
 
@@ -717,19 +952,12 @@ class SessionAssessmentManager:
                         next_state = PedagogicalState.SCAFFOLDING
                         relation_followed = "PLAN_SCAFFOLD"
                 else:
-                    # Max attempts reached on this concept: Defer to cyclic queue and switch to a different question
-                    self.examination_plan.defer_concept(
-                        concept_id=concept_id, required_correct_answers=2
-                    )
-                    next_item = self.examination_plan.advance_to_next()
-                    if next_item:
-                        next_concept_id = next_item.concept_id
-                        next_state = PedagogicalState.EXPLORATION
-                        relation_followed = "PLAN_NEXT_AFTER_FAIL"
-                    else:
-                        next_concept_id = concept_id
-                        next_state = PedagogicalState.EXPLORATION
-                        relation_followed = "PLAN_COMPLETED"
+                    # Ask the student before deferring the topic; do not switch
+                    # concepts until they explicitly choose to move on.
+                    self.pending_skip_confirmation = concept_id
+                    next_concept_id = concept_id
+                    next_state = PedagogicalState.SCAFFOLDING
+                    relation_followed = "PLAN_SKIP_CONFIRMATION_PENDING"
         else:
             # Fallback to dynamic FSM
             if eval_detail.evaluation_result in (
@@ -765,10 +993,10 @@ class SessionAssessmentManager:
         self.last_turn_assessment = turn_assessment
 
         now_iso = datetime.now().isoformat()
-        current_ai_question = (
+        current_ai_question = self.last_ai_directive or (
             plan_item.planned_question.main_question
-            if plan_item and hasattr(plan_item, "planned_question") and hasattr(plan_item.planned_question, "main_question")
-            else (self.last_ai_directive or f"Mi parli di {current_concept.name}.")
+            if plan_item and hasattr(plan_item, "planned_question")
+            else f"Mi parli di {current_concept.name}."
         )
 
         # 5. Record full conversation turn history
@@ -836,21 +1064,29 @@ class SessionAssessmentManager:
                 elif (
                     relation_followed == "PLAN_NARROWING" and q_spec.narrowing_questions
                 ):
-                    narrow_idx = max(0, target_plan_item.current_attempt - 1) % len(q_spec.narrowing_questions)
-                    new_context.pedagogical_directive = q_spec.narrowing_questions[narrow_idx]
-                elif q_spec.scaffolding_hints:
-                    hint_idx = max(0, target_plan_item.current_attempt - 1) % len(q_spec.scaffolding_hints)
-                    new_context.pedagogical_directive = (
-                        f"Prova a riflettere su questo indizio: {q_spec.scaffolding_hints[hint_idx]}"
+                    narrow_idx = max(0, target_plan_item.current_attempt - 1) % len(
+                        q_spec.narrowing_questions
                     )
+                    new_context.pedagogical_directive = q_spec.narrowing_questions[
+                        narrow_idx
+                    ]
+                elif q_spec.scaffolding_hints:
+                    hint_idx = max(0, target_plan_item.current_attempt - 1) % len(
+                        q_spec.scaffolding_hints
+                    )
+                    new_context.pedagogical_directive = f"Prova a riflettere su questo indizio: {q_spec.scaffolding_hints[hint_idx]}"
                 else:
                     new_context.pedagogical_directive = f"Prova a partire dalla definizione di base di {target_plan_item.concept_name}."
             elif (
                 relation_followed == "PLAN_COLLISION"
                 and q_spec.collision_check_questions
             ):
-                coll_idx = max(0, target_plan_item.current_attempt - 1) % len(q_spec.collision_check_questions)
-                new_context.pedagogical_directive = q_spec.collision_check_questions[coll_idx]
+                coll_idx = max(0, target_plan_item.current_attempt - 1) % len(
+                    q_spec.collision_check_questions
+                )
+                new_context.pedagogical_directive = q_spec.collision_check_questions[
+                    coll_idx
+                ]
             elif relation_followed == "PLAN_DEFERRED_RETRY":
                 retry_hint = (
                     q_spec.scaffolding_hints[0]
@@ -858,12 +1094,21 @@ class SessionAssessmentManager:
                     else q_spec.main_question
                 )
                 new_context.pedagogical_directive = f"Molto bene! Ora che abbiamo chiarito questi aspetti, torniamo un attimo indietro su {target_plan_item.concept_name}: {retry_hint}"
+            elif relation_followed == "PLAN_STRESS_TEST":
+                stress_q = q_spec.stress_test_questions[0]
+                new_context.pedagogical_directive = f"La spiegazione teorica è chiara. Verifichiamo ora che tu sappia applicarla: {stress_q}"
             elif relation_followed == "PLAN_NEXT":
                 new_context.pedagogical_directive = (
                     f"Molto bene. {q_spec.main_question}"
                 )
             elif relation_followed == "PLAN_NEXT_AFTER_FAIL":
                 new_context.pedagogical_directive = f"Nessun problema, lasciamo da parte questo argomento per ora. Passiamo ad altro: {q_spec.main_question}"
+            elif relation_followed == "PLAN_SKIP_CONFIRMATION_PENDING":
+                new_context.pedagogical_directive = (
+                    f"Mi sembra che questo punto sia ancora un po' incerto. Vuoi "
+                    f"passare al prossimo argomento e tornarci più avanti? Se preferisci, "
+                    f"restiamo qui e ti do un indizio."
+                )
             elif relation_followed == "PLAN_COMPLETED":
                 new_context.pedagogical_directive = "Abbiamo completato tutti gli argomenti previsti nel piano d'esame. Ottimo lavoro!"
 
@@ -874,10 +1119,11 @@ class SessionAssessmentManager:
             == self.last_ai_directive.strip().lower()
         ):
             c_label = current_concept.name if current_concept else concept_id
-            logger.info("Consecutive identical directive detected. Varying prompt for %s", c_label)
-            new_context.pedagogical_directive = (
-                f"Per aiutarti ad approfondire {c_label}, prova a farmi un esempio concreto o spiegami la sua utilità applicativa."
+            logger.info(
+                "Consecutive identical directive detected. Varying prompt for %s",
+                c_label,
             )
+            new_context.pedagogical_directive = f"Per aiutarti ad approfondire {c_label}, prova a farmi un esempio concreto o spiegami la sua utilità applicativa."
 
         plan_info = ""
         if self.examination_plan:
@@ -1304,6 +1550,7 @@ class SessionAssessmentManager:
             "current_iteration": self.current_iteration,
             "paused_concept_id": self.paused_concept_id,
             "current_concept_id": self.current_concept_id,
+            "pending_skip_confirmation": self.pending_skip_confirmation,
             "current_pedagogical_state": self.current_pedagogical_state.value,
             "consecutive_failures": self.consecutive_failures,
             "history": self.history,
@@ -1348,6 +1595,7 @@ class SessionAssessmentManager:
         self.current_iteration = data.get("current_iteration", 1)
         self.paused_concept_id = data.get("paused_concept_id")
         self.current_concept_id = data.get("current_concept_id")
+        self.pending_skip_confirmation = data.get("pending_skip_confirmation")
         state_val = data.get("current_pedagogical_state", "EXPLORATION")
         self.current_pedagogical_state = PedagogicalState(state_val)
         self.consecutive_failures = data.get("consecutive_failures", 0)
@@ -1361,7 +1609,9 @@ class SessionAssessmentManager:
         elif self.examination_plan and data.get("examination_plan"):
             saved_plan = data["examination_plan"]
             saved_doc_id = saved_plan.get("document_id") or saved_plan.get("title")
-            curr_doc_id = self.examination_plan.document_id or self.examination_plan.title
+            curr_doc_id = (
+                self.examination_plan.document_id or self.examination_plan.title
+            )
             if saved_doc_id and curr_doc_id and saved_doc_id != curr_doc_id:
                 logger.warning(
                     "State file at %s has foreign plan for '%s' while manager is configured for '%s'. Ignoring foreign plan.",

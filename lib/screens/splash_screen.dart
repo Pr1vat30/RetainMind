@@ -75,7 +75,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             exam.fetchHistory(),
           ]);
 
-          // Prewarm LiveKit room and voice agent for active course
+          // Prewarm Pipecat session state for the active course
           await exam.prewarmExamSession();
         }
       } catch (_) {}
@@ -269,7 +269,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: Text(
-                  'Powered by LiveKit & Gemini AI',
+                  'Powered by Pipecat & Gemini AI',
                   style: TextStyle(
                     color: colors.textTertiary.withValues(alpha: 0.5),
                     fontSize: 11,

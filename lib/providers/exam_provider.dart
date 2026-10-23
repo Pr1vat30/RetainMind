@@ -1,15 +1,17 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import '../constants.dart';
 import '../models/session_models.dart';
 import '../services/api_service.dart';
-import '../services/livekit_service.dart';
+import '../services/pipecat_service.dart';
 import '../widgets/avatar/avatar_models.dart';
 
 class ExamProvider with ChangeNotifier {
   late final ApiService _apiService;
-  late final LiveKitService _liveKitService;
+  late final PipecatService _pipecatService;
 
   SessionStatusInfo? _sessionStatus;
   DiagnosticReport? _diagnosticReport;
@@ -31,18 +33,20 @@ class ExamProvider with ChangeNotifier {
   Timer? _statusPollingTimer;
 
   ExamProvider({String? initialBaseUrl}) {
-    _apiService = ApiService(baseUrl: initialBaseUrl ?? AppConstants.defaultBaseUrl);
-    _liveKitService = LiveKitService();
+    _apiService = ApiService(
+      baseUrl: initialBaseUrl ?? AppConstants.defaultBaseUrl,
+    );
+    _pipecatService = PipecatService();
 
     // Listen to speaking state and connection changes
-    _liveKitService.speakingStateStream.listen((_) => notifyListeners());
-    _liveKitService.connectionStateStream.listen((_) => notifyListeners());
-    _liveKitService.micMutedStream.listen((_) => notifyListeners());
+    _pipecatService.speakingStateStream.listen((_) => notifyListeners());
+    _pipecatService.connectionStateStream.listen((_) => notifyListeners());
+    _pipecatService.micMutedStream.listen((_) => notifyListeners());
   }
 
   // Getters
   ApiService get apiService => _apiService;
-  LiveKitService get liveKitService => _liveKitService;
+  PipecatService get pipecatService => _pipecatService;
   SessionStatusInfo? get sessionStatus => _sessionStatus;
   DiagnosticReport? get diagnosticReport => _diagnosticReport;
   ExaminationPlanModel? get examinationPlan => _examinationPlan;
@@ -57,24 +61,40 @@ class ExamProvider with ChangeNotifier {
   bool get isDirectTestMode => _isDirectTestMode;
   String? get errorMessage => _errorMessage;
 
-  ConnectionStateEnum get connectionState => _liveKitService.connectionState;
-  SpeakingStateEnum get speakingState => _liveKitService.speakingState;
-  bool get isMicMuted => _liveKitService.isMicMuted;
-  bool get isSpeakerphoneOn => _liveKitService.isSpeakerphoneOn;
+  ConnectionStateEnum get connectionState => _pipecatService.connectionState;
+  SpeakingStateEnum get speakingState => _pipecatService.speakingState;
+  bool get isMicMuted => _pipecatService.isMicMuted;
+  bool get isSpeakerphoneOn => _pipecatService.isSpeakerphoneOn;
   bool get isConnected => connectionState == ConnectionStateEnum.connected;
   bool get isAiSpeaking => speakingState == SpeakingStateEnum.aiSpeaking;
-  bool get isStudentSpeaking => speakingState == SpeakingStateEnum.studentSpeaking;
+  bool get isStudentSpeaking =>
+      speakingState == SpeakingStateEnum.studentSpeaking;
   bool get isAiThinking => speakingState == SpeakingStateEnum.thinking;
 
   /// Compiled once at class level — avoids re-creating RegExp on every call.
   static final List<RegExp> _aiQuestionPrefixes = [
-    RegExp(r'^(perfetto,?\s*(iniziamo|riprendiamo)\s*(subito)?!?:?\s*)', caseSensitive: false),
+    RegExp(
+      r'^(perfetto,?\s*(iniziamo|riprendiamo)\s*(subito)?!?:?\s*)',
+      caseSensitive: false,
+    ),
     RegExp(r'^(molto bene\.?\s*)', caseSensitive: false),
     RegExp(r'^(ottimo\.?\s*)', caseSensitive: false),
-    RegExp(r'^(nessun problema,?\s*lasciamo da parte questo argomento per ora\.?\s*passiamo ad altro:?\s*)', caseSensitive: false),
-    RegExp(r'^(ora che abbiamo chiarito questi aspetti,?\s*torniamo un attimo indietro[^:]*:?\s*)', caseSensitive: false),
-    RegExp(r'^(buongiorno!?\s*benvenuto[^?]+sei pronto\??\s*)', caseSensitive: false),
-    RegExp(r'^(bentornato[^?]+sei pronto a riprendere\??\s*)', caseSensitive: false),
+    RegExp(
+      r'^(nessun problema,?\s*lasciamo da parte questo argomento per ora\.?\s*passiamo ad altro:?\s*)',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'^(ora che abbiamo chiarito questi aspetti,?\s*torniamo un attimo indietro[^:]*:?\s*)',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'^(buongiorno!?\s*benvenuto[^?]+sei pronto\??\s*)',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'^(bentornato[^?]+sei pronto a riprendere\??\s*)',
+      caseSensitive: false,
+    ),
   ];
 
   /// Cleans conversational banter/greetings from the AI's question, leaving strictly the question
@@ -131,7 +151,8 @@ class ExamProvider with ChangeNotifier {
     for (final turn in _transcriptTurns.reversed) {
       if (turn.aiQuestion.trim().isNotEmpty) {
         final cleaned = cleanAiQuestion(turn.aiQuestion);
-        if (cleaned.isNotEmpty && !cleaned.toLowerCase().contains('sei pronto')) {
+        if (cleaned.isNotEmpty &&
+            !cleaned.toLowerCase().contains('sei pronto')) {
           return cleaned;
         }
       }
@@ -140,7 +161,7 @@ class ExamProvider with ChangeNotifier {
     return '';
   }
 
-  /// Reactive Grok Avatar mood based on LiveKit voice stream & Pedagogical FSM
+  /// Reactive Grok Avatar mood based on Pipecat voice stream & Pedagogical FSM
   AvatarAgentMood get avatarMood {
     // 1. If exam paused -> Sleepy / resting
     if (_sessionStatus?.status == 'PAUSED') {
@@ -212,18 +233,18 @@ class ExamProvider with ChangeNotifier {
     _apiService.updateBaseUrl(newUrl);
     notifyListeners();
     try {
-      await Future.wait([
-        fetchStatus(),
-        fetchPlan(),
-        fetchHistory(),
-      ]);
+      await Future.wait([fetchStatus(), fetchPlan(), fetchHistory()]);
     } catch (_) {}
   }
 
   Future<void> fetchStatus({String? courseId}) async {
     try {
-      final targetCourse = (courseId != null && courseId.isNotEmpty) ? courseId : _currentCourseId;
-      final newStatus = await _apiService.fetchSessionStatus(courseId: targetCourse);
+      final targetCourse = (courseId != null && courseId.isNotEmpty)
+          ? courseId
+          : _currentCourseId;
+      final newStatus = await _apiService.fetchSessionStatus(
+        courseId: targetCourse,
+      );
       if (newStatus.courseId.isNotEmpty) {
         _currentCourseId = newStatus.courseId;
       }
@@ -231,7 +252,8 @@ class ExamProvider with ChangeNotifier {
           _sessionStatus?.status != newStatus.status ||
           _sessionStatus?.currentConceptId != newStatus.currentConceptId ||
           _sessionStatus?.pedagogicalState != newStatus.pedagogicalState ||
-          _sessionStatus?.planProgressPercentage != newStatus.planProgressPercentage ||
+          _sessionStatus?.planProgressPercentage !=
+              newStatus.planProgressPercentage ||
           _sessionStatus?.planStep != newStatus.planStep) {
         _sessionStatus = newStatus;
         notifyListeners();
@@ -241,14 +263,19 @@ class ExamProvider with ChangeNotifier {
 
   Future<void> fetchTranscript({String? courseId}) async {
     try {
-      final targetCourse = (courseId != null && courseId.isNotEmpty) ? courseId : _currentCourseId;
+      final targetCourse = (courseId != null && courseId.isNotEmpty)
+          ? courseId
+          : _currentCourseId;
       final turns = await _apiService.fetchTranscript(courseId: targetCourse);
 
       // Compare by both count AND the last turn's timestamp to catch backend corrections
       // where the turn count stays the same but content/transcript is updated.
       final lastTimestampNew = turns.isNotEmpty ? turns.last.timestamp : '';
-      final lastTimestampOld = _transcriptTurns.isNotEmpty ? _transcriptTurns.last.timestamp : '';
-      if (_transcriptTurns.length != turns.length || lastTimestampNew != lastTimestampOld) {
+      final lastTimestampOld = _transcriptTurns.isNotEmpty
+          ? _transcriptTurns.last.timestamp
+          : '';
+      if (_transcriptTurns.length != turns.length ||
+          lastTimestampNew != lastTimestampOld) {
         _transcriptTurns = turns;
         notifyListeners();
       }
@@ -257,7 +284,9 @@ class ExamProvider with ChangeNotifier {
 
   Future<void> fetchPlan({String? courseId}) async {
     try {
-      final targetCourse = (courseId != null && courseId.isNotEmpty) ? courseId : _currentCourseId;
+      final targetCourse = (courseId != null && courseId.isNotEmpty)
+          ? courseId
+          : _currentCourseId;
       _examinationPlan = await _apiService.fetchPlan(courseId: targetCourse);
       notifyListeners();
     } catch (_) {}
@@ -265,8 +294,12 @@ class ExamProvider with ChangeNotifier {
 
   Future<void> fetchComparison({String? courseId}) async {
     try {
-      final targetCourse = (courseId != null && courseId.isNotEmpty) ? courseId : _currentCourseId;
-      _comparisonReport = await _apiService.fetchComparison(courseId: targetCourse);
+      final targetCourse = (courseId != null && courseId.isNotEmpty)
+          ? courseId
+          : _currentCourseId;
+      _comparisonReport = await _apiService.fetchComparison(
+        courseId: targetCourse,
+      );
       notifyListeners();
     } catch (_) {}
   }
@@ -290,33 +323,48 @@ class ExamProvider with ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<List<DialogueTurn>> fetchTranscriptForIteration(int iteration, {String? courseId}) async {
+  Future<List<DialogueTurn>> fetchTranscriptForIteration(
+    int iteration, {
+    String? courseId,
+  }) async {
     try {
-      return await _apiService.fetchTranscript(iteration: iteration, courseId: courseId);
+      return await _apiService.fetchTranscript(
+        iteration: iteration,
+        courseId: courseId,
+      );
     } catch (_) {
       return [];
     }
   }
 
-  String _resolveLiveKitServerUrl(String rawUrl) {
-    try {
-      final lkUri = Uri.parse(rawUrl);
-      if (lkUri.host == '127.0.0.1' || lkUri.host == 'localhost') {
-        final apiUri = Uri.parse(_apiService.baseUrl);
-        final targetHost = (apiUri.host.isNotEmpty &&
-                apiUri.host != '127.0.0.1' &&
-                apiUri.host != 'localhost')
-            ? apiUri.host
-            : (defaultTargetPlatform == TargetPlatform.android
-                ? '10.0.2.2'
-                : lkUri.host);
-        return lkUri.replace(host: targetHost).toString();
-      }
-    } catch (_) {}
-    return rawUrl;
+  String _resolvePipecatWsUrl(TokenResponse tokenRes) {
+    // Use the API origin selected by health discovery. The backend may return
+    // localhost in websocket_endpoint (or an insecure ws:// URL behind HTTPS).
+    final apiUri = Uri.parse(_apiService.baseUrl);
+    final endpoint = tokenRes.websocketEndpoint;
+    final endpointUri = endpoint != null && endpoint.isNotEmpty
+        ? Uri.parse(endpoint)
+        : Uri(
+            path:
+                '/ws/${(_currentCourseId != null && _currentCourseId!.isNotEmpty) ? _currentCourseId : tokenRes.roomName}',
+          );
+
+    var host = apiUri.host;
+    if ((host == 'localhost' || host == '127.0.0.1') &&
+        defaultTargetPlatform == TargetPlatform.android) {
+      host = '10.0.2.2';
+    }
+    final scheme = apiUri.scheme == 'https' ? 'wss' : 'ws';
+    return Uri(
+      scheme: scheme,
+      host: host,
+      port: apiUri.hasPort ? apiUri.port : null,
+      path: endpointUri.path,
+      query: endpointUri.hasQuery ? endpointUri.query : null,
+    ).toString();
   }
 
-  /// Proactively prewarms LiveKit room and agent connection in background
+  /// Proactively prewarms the Pipecat session token in background.
   Future<void> prewarmExamSession({String? courseId}) async {
     final targetCourse = (courseId != null && courseId.isNotEmpty)
         ? courseId
@@ -327,7 +375,9 @@ class ExamProvider with ChangeNotifier {
       if (token != null) {
         _prewarmedSession = token;
         _prewarmedCourseId = targetCourse;
-        debugPrint('🔥 LiveKit prewarmed session acquired for room: ${token.roomName} (Course: $targetCourse)');
+        debugPrint(
+          '🔥 Pipecat prewarmed session acquired (Course: $targetCourse)',
+        );
       }
     } catch (e) {
       debugPrint('Prewarm exam session error: $e');
@@ -361,10 +411,11 @@ class ExamProvider with ChangeNotifier {
               (_prewarmedCourseId == null && effectiveCourseId == null))) {
         tokenRes = _prewarmedSession!;
         _prewarmedSession = null;
-        debugPrint('⚡ Using prewarmed LiveKit session token for room ${tokenRes.roomName}');
+        debugPrint('⚡ Using prewarmed Pipecat session token');
       } else {
-        // Generate deterministic course-scoped room name so backend LiveKit agent knows exactly which document is loaded
-        final effectiveRoomName = roomName ??
+        // Generate deterministic course-scoped room name so backend knows which document is loaded
+        final effectiveRoomName =
+            roomName ??
             (effectiveCourseId != null && effectiveCourseId.isNotEmpty
                 ? 'oral-exam-$effectiveCourseId-${DateTime.now().millisecondsSinceEpoch}'
                 : 'oral-exam-${DateTime.now().millisecondsSinceEpoch}');
@@ -378,20 +429,18 @@ class ExamProvider with ChangeNotifier {
         );
       }
 
-      final resolvedUrl = _resolveLiveKitServerUrl(tokenRes.serverUrl);
+      final wsUrl = _resolvePipecatWsUrl(tokenRes);
+      debugPrint('🔌 Connecting to Pipecat WS: $wsUrl');
 
-      // 2. Connect to LiveKit Room via WebRTC
-      await _liveKitService.connect(
-        serverUrl: resolvedUrl,
-        token: tokenRes.participantToken,
-      );
+      // 2. Connect to Pipecat via WebSocket
+      await _pipecatService.connect(wsUrl: wsUrl);
 
       // 3. Start Periodic Telemetry & Transcript Polling
       _startPolling();
 
       // 4. Wait for initial AI voice interaction before transitioning
       if (waitForAiInteraction) {
-        await _liveKitService.waitForFirstAiInteraction();
+        await _pipecatService.waitForFirstAiInteraction();
       }
 
       _isLoading = false;
@@ -414,10 +463,7 @@ class ExamProvider with ChangeNotifier {
       if (_pollingInFlight) return;
       _pollingInFlight = true;
       try {
-        await Future.wait([
-          fetchStatus(),
-          fetchTranscript(),
-        ]);
+        await Future.wait([fetchStatus(), fetchTranscript()]);
       } finally {
         _pollingInFlight = false;
       }
@@ -430,20 +476,22 @@ class ExamProvider with ChangeNotifier {
   }
 
   Future<void> toggleMicrophone() async {
-    await _liveKitService.toggleMicrophone();
+    await _pipecatService.toggleMicrophone();
     notifyListeners();
   }
 
   Future<void> toggleSpeakerphone() async {
-    await _liveKitService.toggleSpeakerphone();
+    await _pipecatService.toggleSpeakerphone();
     notifyListeners();
   }
 
   Future<void> pauseExam({String? courseId}) async {
     try {
       _stopPolling();
-      await _liveKitService.disconnect();
-      final targetCourse = (courseId != null && courseId.isNotEmpty) ? courseId : _currentCourseId;
+      await _pipecatService.disconnect();
+      final targetCourse = (courseId != null && courseId.isNotEmpty)
+          ? courseId
+          : _currentCourseId;
       await _apiService.pauseSession(courseId: targetCourse);
       await fetchStatus(courseId: targetCourse);
       await fetchHistory();
@@ -453,16 +501,19 @@ class ExamProvider with ChangeNotifier {
     }
   }
 
-  /// Avvia una sessione vocale DIRETTA e ultra-rapida con Gemini Live via LiveKit
+  /// Avvia una sessione vocale DIRETTA e ultra-rapida con Gemini Live via Pipecat
   /// Bypassa completamente database, vettori, piani di studio, OCR ed FSM.
-  Future<void> startDirectTestSession({bool waitForAiInteraction = true}) async {
+  Future<void> startDirectTestSession({
+    bool waitForAiInteraction = true,
+  }) async {
     _isLoading = true;
     _errorMessage = null;
     _isDirectTestMode = true;
     notifyListeners();
 
     try {
-      final directRoomName = 'direct-test-${DateTime.now().millisecondsSinceEpoch}';
+      final directRoomName =
+          'direct-test-${DateTime.now().millisecondsSinceEpoch}';
       final tokenRes = await _apiService.fetchToken(
         roomName: directRoomName,
         courseId: 'direct_test',
@@ -470,15 +521,13 @@ class ExamProvider with ChangeNotifier {
         participantName: 'Tester',
       );
 
-      final resolvedUrl = _resolveLiveKitServerUrl(tokenRes.serverUrl);
+      final wsUrl = _resolvePipecatWsUrl(tokenRes);
+      debugPrint('🔌 Direct test connecting to Pipecat WS: $wsUrl');
 
-      await _liveKitService.connect(
-        serverUrl: resolvedUrl,
-        token: tokenRes.participantToken,
-      );
+      await _pipecatService.connect(wsUrl: wsUrl);
 
       if (waitForAiInteraction) {
-        await _liveKitService.waitForFirstAiInteraction();
+        await _pipecatService.waitForFirstAiInteraction();
       }
     } catch (e) {
       _errorMessage = e.toString();
@@ -493,7 +542,7 @@ class ExamProvider with ChangeNotifier {
   /// Termina in modo pulito la sessione vocale diretta senza modificare lo stato dei corsi
   Future<void> endDirectTest() async {
     _stopPolling();
-    await _liveKitService.disconnect();
+    await _pipecatService.disconnect();
     _isDirectTestMode = false;
     notifyListeners();
   }
@@ -552,13 +601,14 @@ class ExamProvider with ChangeNotifier {
       }
       // 1. Initialize a completely fresh, isolated discussion on the server
       final res = await _apiService.createNewDiscussion(courseId: courseId);
-      final assignedRoom = res['room_name'] as String? ??
+      final assignedRoom =
+          res['room_name'] as String? ??
           (courseId != null && courseId.isNotEmpty
               ? 'oral-exam-$courseId-${DateTime.now().millisecondsSinceEpoch}'
               : 'oral-exam-${DateTime.now().millisecondsSinceEpoch}');
       _transcriptTurns = [];
 
-      // 2. Start LiveKit WebRTC connection with the isolated room name
+      // 2. Start a Pipecat voice session with the isolated room name
       await startExam(roomName: assignedRoom, courseId: courseId);
       unawaited(Future.wait([fetchStatus(), fetchHistory()]));
     } catch (e) {
@@ -574,11 +624,7 @@ class ExamProvider with ChangeNotifier {
     notifyListeners();
     try {
       await _apiService.deleteDiscussion(identifier);
-      await Future.wait([
-        fetchHistory(),
-        fetchStatus(),
-        fetchPlan(),
-      ]);
+      await Future.wait([fetchHistory(), fetchStatus(), fetchPlan()]);
     } catch (e) {
       _errorMessage = 'Errore eliminazione discussione: $e';
     } finally {
@@ -609,11 +655,7 @@ class ExamProvider with ChangeNotifier {
         _currentCourseId = courseId;
       }
       _transcriptTurns = [];
-      await Future.wait([
-        fetchPlan(),
-        fetchStatus(),
-        fetchHistory(),
-      ]);
+      await Future.wait([fetchPlan(), fetchStatus(), fetchHistory()]);
       await startExam(courseId: courseId);
       unawaited(Future.wait([fetchStatus(), fetchHistory()]));
     } catch (e) {
@@ -624,9 +666,11 @@ class ExamProvider with ChangeNotifier {
     }
   }
 
-  Future<void> generateExamFromTopicAndStartNewDiscussion({
+  Future<Map<String, dynamic>> generateExamFromTopic({
     required String topic,
     String? title,
+    String level = 'intermedio',
+    int durationMinutes = 20,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -636,19 +680,18 @@ class ExamProvider with ChangeNotifier {
       final res = await _apiService.generateExamFromTopic(
         topic: topic,
         title: title,
+        level: level,
+        durationMinutes: durationMinutes,
       );
       final courseId = res['course_id'] as String?;
       if (courseId != null && courseId.isNotEmpty) {
         _currentCourseId = courseId;
       }
       _transcriptTurns = [];
-      await Future.wait([
-        fetchPlan(),
-        fetchStatus(),
-        fetchHistory(),
-      ]);
-      await startExam(courseId: courseId);
-      unawaited(Future.wait([fetchStatus(), fetchHistory()]));
+      await Future.wait([fetchPlan(), fetchStatus(), fetchHistory()]);
+      _isLoading = false;
+      notifyListeners();
+      return res;
     } catch (e) {
       _isLoading = false;
       _errorMessage = 'Errore generazione esame da argomento: $e';
@@ -693,16 +736,12 @@ class ExamProvider with ChangeNotifier {
 
   Future<void> endExam() async {
     _stopPolling();
-    await _liveKitService.disconnect();
+    await _pipecatService.disconnect();
     try {
       // Archive completed session on backend into history
       await _apiService.repeatSession(adapt: false);
       _diagnosticReport = await _apiService.fetchDiagnosticReport();
-      await Future.wait([
-        fetchComparison(),
-        fetchHistory(),
-        fetchStatus(),
-      ]);
+      await Future.wait([fetchComparison(), fetchHistory(), fetchStatus()]);
     } catch (_) {}
     notifyListeners();
   }
@@ -722,7 +761,7 @@ class ExamProvider with ChangeNotifier {
   @override
   void dispose() {
     _stopPolling();
-    _liveKitService.dispose();
+    unawaited(_pipecatService.dispose());
     _apiService.close();
     super.dispose();
   }

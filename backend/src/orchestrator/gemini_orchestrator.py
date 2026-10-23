@@ -2,7 +2,7 @@
 
 Provides high-level asynchronous APIs to ingest course materials, build topologically
 sequenced examination plans, and simulate Bayesian Knowledge Tracing updates outside
-the real-time LiveKit audio loop.
+the real-time Pipecat audio loop.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from typing import Any
 
 from assessment.bkt import BayesianKnowledgeTracing
 from assessment.report import SessionReportGenerator
+from config import config
 from planning.models import ExaminationPlan, PlanItemStatus
 from planning.planner import ExaminationPlanner
 from rag.graph_store import BaseGraphStore, create_graph_store
@@ -26,7 +27,7 @@ logger = logging.getLogger("orchestrator.gemini")
 class GeminiOrchestrator:
     """Independent Knowledge Ingestion, Pedagogical Planning & Bayesian Tracing Engine.
 
-    Operates completely separate from LiveKit's real-time voice loop.
+    Operates separately from Pipecat's real-time voice loop.
     """
 
     def __init__(
@@ -62,7 +63,7 @@ class GeminiOrchestrator:
 
         # 1. Ingest file and build knowledge base
         ingest_res = await self.pipeline.ingest_file(
-            str(path), llm_model="gemini-3.8-flash"
+            str(path), llm_model=config.plan_generation_model
         )
         logger.info(
             "Gemini Orchestrator: Ingestion done (%d chunks, %d concepts)",
@@ -87,6 +88,8 @@ class GeminiOrchestrator:
         topic: str,
         title: str | None = None,
         plan_output_file: str | Path = "examination_plan.json",
+        level: str = "intermedio",
+        duration_minutes: int = 20,
     ) -> tuple[ExaminationPlan, str, str]:
         """Generates an academic course syllabus and topologically ordered examination plan directly from a topic.
 
@@ -98,12 +101,15 @@ class GeminiOrchestrator:
 
         extracted = KnowledgeExtractor.extract_from_topic(
             topic=topic,
-            model="gemini-3.8-flash",
+            model=config.plan_generation_model,
+            level=level,
+            duration_minutes=duration_minutes,
         )
 
         resolved_title = title or extracted.get("course_title") or topic
         summary_md = extracted.get(
-            "course_summary_markdown", f"# {resolved_title}\n\nSintesi didattica su {topic}."
+            "course_summary_markdown",
+            f"# {resolved_title}\n\nSintesi didattica su {topic}.",
         )
 
         doc_id = CourseManager.slugify(resolved_title)

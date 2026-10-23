@@ -66,9 +66,13 @@ class ExaminationPlanner:
                     queue.append(dep)
 
         # Append any remaining concepts (in case of cyclic prerequisites)
-        for cid in concept_ids:
-            if cid not in sorted_order:
-                sorted_order.append(cid)
+        cyclic_ids = [cid for cid in concept_ids if cid not in sorted_order]
+        if cyclic_ids:
+            logger.warning(
+                "Prerequisite cycle detected among concepts %s; keeping them in source order after acyclic concepts",
+                cyclic_ids,
+            )
+            sorted_order.extend(cyclic_ids)
 
         return sorted_order
 

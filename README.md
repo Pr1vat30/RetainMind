@@ -1,6 +1,6 @@
 # RetainMind (`retain_mind`)
 
-Assistente Vocale Socratico AI per Esami Orali Universitari — Sistema Completo Frontend Flutter + Backend LiveKit Agents.
+Assistente vocale socratico per esami orali universitari, con client Flutter e backend real-time basato su Pipecat.
 
 ---
 
@@ -15,8 +15,8 @@ retain_mind/
 │   ├── constants.dart                # Palette, stati FSM e configurazione host
 │   ├── models/                       # Modelli dati tipizzati (Session, Plan, Report)
 │   ├── services/
-│   │   ├── api_service.dart          # Client REST (Token, Stato BKT, Trascrizioni, Report)
-│   │   └── livekit_service.dart      # WebRTC Room & Microfono LiveKit
+│   │   ├── api_service.dart          # Client REST per sessioni, corsi, piani e report
+│   │   └── pipecat_service.dart     # Audio PCM su WebSocket verso il backend Pipecat
 │   ├── providers/
 │   │   └── exam_provider.dart        # State Management centralizzato
 │   ├── screens/
@@ -31,7 +31,7 @@ retain_mind/
 │       ├── bkt_progress_bar.dart     # Progresso esame e badge FSM
 │       └── transcript_bubble.dart    # Turni di conversazione con ΔMastery
 │
-├── pubspec.yaml                      # Dipendenze Flutter (livekit_client, provider, fl_chart, ecc.)
+├── pubspec.yaml                      # Dipendenze Flutter (audio PCM, WebSocket, provider, grafici)
 ├── android/                          # Configurazione Android (permessi microfono e rete)
 ├── ios/                              # Configurazione iOS (NSMicrophoneUsageDescription)
 ├── macos/                            # Configurazione macOS (audio-input & network entitlements)
@@ -40,18 +40,18 @@ retain_mind/
 │   ├── RetainMind_RAD.md             # Requirements Analysis Document (RAD) completo
 │   └── RetainMind_Business_Model_Canvas.md
 │
-└── backend/                          # Backend LiveKit Voice Agent (Python)
+└── backend/                          # Backend FastAPI + Pipecat (Python)
     ├── src/
-    │   ├── agent.py                  # LiveKit Voice Agent (Gemini Live / Cascade)
-    │   ├── api.py                    # Server REST & Token Gateway (FastAPI/aiohttp)
-    │   ├── assessment/               # BKT, Pedagogical FSM, RCA Report, SessionService
+    │   ├── agent.py                  # Pipeline vocale Pipecat: Gemini Live o pipeline cascaded
+    │   ├── api.py                    # API REST, WebSocket Flutter e signaling SmallWebRTC
+    │   ├── assessment/               # Valutazione, BKT, FSM, sessioni e store per corso
     │   ├── rag/                      # Neo4j, Qdrant, Knowledge Graph
     │   ├── planning/                 # Topological Examination Planner
     │   └── config.py                 # Gestione configurazione locale/cloud
     ├── tests/                        # Suite di test pytest completa
     ├── pyproject.toml                # Specifiche dipendenze Python (uv)
-    ├── start_agent_cloud.sh          # Avvia Voice Agent collegato a LiveKit Cloud
-    ├── start_api_server.sh           # Avvia Server REST & Token API (porta 8000)
+    ├── start_agent_cloud.sh          # Alias per l'avvio del server unificato Pipecat
+    ├── start_api_server.sh           # Avvia API REST e sessioni vocali (porta 8000)
     └── examination_plan.json         # Piano didattico e grafo dei prerequisiti
 ```
 
@@ -63,12 +63,13 @@ retain_mind/
 ```bash
 cd backend
 
-# Terminale 1: Server REST & Token API per Flutter
+# Avvia in un solo terminale: API REST e agent Pipecat
 ./start_api_server.sh
-
-# Terminale 2: Voice Agent LiveKit Cloud
-./start_agent_cloud.sh
 ```
+
+`start_agent_cloud.sh` è mantenuto per compatibilità e richiama lo stesso server: non avviare entrambi gli script contemporaneamente.
+
+Per creare un piano da un argomento, l'app consente di scegliere livello e durata e mostra una revisione della dispensa e degli argomenti generati prima di avviare l'interrogazione. Il modello predefinito di generazione del piano è `gemini-3.5-flash-lite` (`PLAN_GENERATION_MODEL`).
 
 ### 2. Avviare l'Applicazione Flutter (da Android Studio o da terminale)
 Dalla radice del progetto:
@@ -94,3 +95,4 @@ flutter run -d chrome
   * **`THINKING`**: Sguardo verso l'alto, occhi socchiusi e satellite luminoso orbitante.
   * **`SPEAKING`**: Risonanza vocale del corpo e occhi espressivi.
   * **Stati Pedagogici**: Espressioni modellate per `SCAFFOLDING`, `CAUSAL_NARROWING` e `CONCEPTUAL_COLLISION`.
+* **Valutazione basata sul piano**: le risposte sono confrontate con i punti attesi; gli argomenti con prova applicativa vengono verificati prima di essere segnati come acquisiti.

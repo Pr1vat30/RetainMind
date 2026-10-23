@@ -31,9 +31,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # LiveKit WebRTC Official SDK
-  livekit_client: ^2.4.0
-
   # Networking & REST API
   http: ^1.2.2
 
@@ -50,6 +47,10 @@ dependencies:
   cupertino_icons: ^1.0.8
   google_fonts: ^6.2.1
   file_picker: ^13.1.0
+  web_socket_channel: ^3.0.3
+  record: ^7.1.2
+  audioplayers: ^6.8.1
+  flutter_pcm_sound: ^3.3.3
 
 
 dev_dependencies:

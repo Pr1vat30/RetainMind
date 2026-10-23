@@ -14,6 +14,7 @@ import os
 import re
 from typing import Any
 
+from config import config
 from rag.models import (
     CausalChain,
     ConceptNode,
@@ -127,7 +128,7 @@ class KnowledgeExtractor:
         cls,
         text: str,
         client: Any | None = None,
-        model: str = "gemini-3.8-flash",
+        model: str | None = None,
     ) -> dict[str, Any]:
         """Resiliently parse and repair JSON returned by the LLM."""
         if not text or not text.strip():
@@ -144,7 +145,9 @@ class KnowledgeExtractor:
                 cleaned = cleaned[start : end + 1]
 
         # 1. Direct standard parse attempt (pre-repair invalid escape sequences and trailing commas)
-        cleaned_escapes = re.sub(r'\\(?![/\\\"bfnrt]|u[0-9a-fA-F]{4})', r'\\\\', cleaned)
+        cleaned_escapes = re.sub(
+            r"\\(?![/\\\"bfnrt]|u[0-9a-fA-F]{4})", r"\\\\", cleaned
+        )
         cleaned_escapes = re.sub(r",\s*([\]}])", r"\1", cleaned_escapes)
         initial_err: Exception | None = None
         try:
@@ -194,6 +197,7 @@ class KnowledgeExtractor:
             try:
                 from google.genai import types
 
+                model = model or config.plan_generation_model
                 logger.info("Chiamata rapida di correzione sintattica JSON a Gemini...")
                 repair_prompt = f"Correggi questo JSON difettoso restituendo esclusivamente il JSON valido senza markdown:\n{cleaned[:15000]}"
                 repair_resp = client.models.generate_content(
@@ -238,11 +242,58 @@ class KnowledgeExtractor:
     def extract_with_llm(
         cls,
         chunks: list[DocumentChunk],
-        model: str = "gemini-3.8-flash",
+        model: str | None = None,
         api_key: str | None = None,
         timeout_seconds: float = 90.0,
     ) -> tuple[list[ConceptNode], list[ConceptRelation], list[CausalChain]]:
         """Extracts deep semantic ontology, ideal reference answers, and questions using Gemini."""
+        if len(chunks) > 25:
+            # Analyze the full source in bounded batches instead of silently
+            # dropping every section after the first 25 chunks.
+            merged_concepts: dict[str, ConceptNode] = {}
+            merged_relations: dict[
+                tuple[str, str, str, str | None], ConceptRelation
+            ] = {}
+            merged_chains: dict[tuple[str, str, str | None], CausalChain] = {}
+            for offset in range(0, len(chunks), 25):
+                batch_concepts, batch_relations, batch_chains = cls.extract_with_llm(
+                    chunks[offset : offset + 25],
+                    model=model,
+                    api_key=api_key,
+                    timeout_seconds=timeout_seconds,
+                )
+                merged_concepts.update(
+                    {concept.id: concept for concept in batch_concepts}
+                )
+                for relation in batch_relations:
+                    key = (
+                        relation.source_id,
+                        relation.target_id,
+                        relation.rel_type.value,
+                        relation.condition,
+                    )
+                    merged_relations[key] = relation
+                for chain in batch_chains:
+                    merged_chains[(chain.cause, chain.effect, chain.condition)] = chain
+            valid_ids = set(merged_concepts)
+            valid_relations = [
+                rel
+                for rel in merged_relations.values()
+                if rel.source_id in valid_ids and rel.target_id in valid_ids
+            ]
+            dangling = len(merged_relations) - len(valid_relations)
+            if dangling:
+                logger.warning(
+                    "Discarded %d extracted relations with unknown concept IDs",
+                    dangling,
+                )
+            return (
+                list(merged_concepts.values()),
+                valid_relations,
+                list(merged_chains.values()),
+            )
+
+        model = model or config.plan_generation_model
         key = api_key or os.getenv("GOOGLE_API_KEY", "")
         if not key:
             raise ValueError(
@@ -318,9 +369,6 @@ MATERIALE DIDATTICO:
                 for fb in [
                     "gemini-3.8-flash",
                     "gemini-3.6-flash",
-                    "gemini-3.5-flash",
-                    "gemini-3-flash-preview",
-                    "gemini-3.5-flash-lite",
                 ]:
                     if fb not in candidate_models:
                         candidate_models.append(fb)
@@ -328,7 +376,10 @@ MATERIALE DIDATTICO:
                 last_error: Exception | None = None
                 for candidate in candidate_models:
                     try:
-                        logger.info("Tentativo di estrazione concetti con modello '%s'...", candidate)
+                        logger.info(
+                            "Tentativo di estrazione concetti con modello '%s'...",
+                            candidate,
+                        )
                         response = client.models.generate_content(
                             model=candidate,
                             contents=prompt,
@@ -352,7 +403,9 @@ MATERIALE DIDATTICO:
 
                 if last_error:
                     raise last_error
-                raise RuntimeError("Nessuna risposta valida ricevuta dai modelli Gemini.")
+                raise RuntimeError(
+                    "Nessuna risposta valida ricevuta dai modelli Gemini."
+                )
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(_call_gemini)
@@ -441,11 +494,14 @@ MATERIALE DIDATTICO:
     def extract_from_topic(
         cls,
         topic: str,
-        model: str = "gemini-3.8-flash",
+        model: str | None = None,
         api_key: str | None = None,
         timeout_seconds: float = 90.0,
+        level: str = "intermedio",
+        duration_minutes: int = 20,
     ) -> dict[str, Any]:
         """Generates an academic curriculum, study summary, and structured examination ontology from a topic prompt."""
+        model = model or config.plan_generation_model
         key = api_key or os.getenv("GOOGLE_API_KEY", "")
         if not key:
             raise ValueError(
@@ -460,11 +516,13 @@ MATERIALE DIDATTICO:
 
             prompt = f"""Sei un professore universitario titolare del corso. Lo studente desidera sostenere un esame orale interamente generato dall'IA sul seguente argomento/materia:
 ARGOMENTO: {topic}
+LIVELLO DELLO STUDENTE: {level}
+DURATA DESIDERATA DELL'INTERROGAZIONE: circa {duration_minutes} minuti
 
 Progetta:
 1. "course_title": un titolo accademico formale e chiaro per il corso/esame (es. "Diritto Costituzionale: Il Procedimento Legislativo").
 2. "course_summary_markdown": un testo didattico di sintesi accademica strutturato in Markdown con sezioni (# Titolo, ## Capitolo 1...) che tratti in modo rigoroso ciascuno dei concetti previsti nell'esame (circa 300-600 parole).
-3. "concepts": una sequenza organica, coerente e propedeutica di concetti fondamentali (da 4 a 6 concetti) per l'interrogazione orale.
+3. "concepts": una sequenza organica, coerente e propedeutica di concetti fondamentali. Scegli il numero di concetti e la profondità in modo proporzionato alla durata richiesta; mantieni comunque almeno 3 e al massimo 8 concetti. Adatta prerequisiti, complessità e domande al livello dello studente.
 
 Per ciascun concetto fornisci:
 - "id": identificativo univoco snake_case (es. "bicameralismo_perfetto")
@@ -512,9 +570,6 @@ Restituisci ESCLUSIVAMENTE un JSON valido con questa struttura:
                 for fb in [
                     "gemini-3.8-flash",
                     "gemini-3.6-flash",
-                    "gemini-3.5-flash",
-                    "gemini-3-flash-preview",
-                    "gemini-3.5-flash-lite",
                 ]:
                     if fb not in candidate_models:
                         candidate_models.append(fb)
@@ -522,7 +577,10 @@ Restituisci ESCLUSIVAMENTE un JSON valido con questa struttura:
                 last_error: Exception | None = None
                 for candidate in candidate_models:
                     try:
-                        logger.info("Tentativo di generazione esame da argomento con modello '%s'...", candidate)
+                        logger.info(
+                            "Tentativo di generazione esame da argomento con modello '%s'...",
+                            candidate,
+                        )
                         response = client.models.generate_content(
                             model=candidate,
                             contents=prompt,
@@ -546,7 +604,9 @@ Restituisci ESCLUSIVAMENTE un JSON valido con questa struttura:
 
                 if last_error:
                     raise last_error
-                raise RuntimeError("Nessuna risposta valida ricevuta dai modelli Gemini.")
+                raise RuntimeError(
+                    "Nessuna risposta valida ricevuta dai modelli Gemini."
+                )
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(_call_gemini)
