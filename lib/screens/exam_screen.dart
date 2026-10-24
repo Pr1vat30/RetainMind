@@ -32,9 +32,7 @@ class _ExamScreenState extends State<ExamScreen> {
           ),
         ),
         content: Text(
-          exam.isDirectTestMode
-              ? 'La sessione di test diretto verrà chiusa e tornerai alla home.'
-              : 'La sessione verrà salvata e tornerai alla schermata principale.',
+          'La sessione verrà salvata e tornerai alla schermata principale.',
           style: TextStyle(color: colors.textSecondary, fontSize: 13, height: 1.35),
         ),
         actions: [
@@ -45,11 +43,7 @@ class _ExamScreenState extends State<ExamScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              if (exam.isDirectTestMode) {
-                await exam.endDirectTest();
-              } else {
-                await exam.pauseExam();
-              }
+              await exam.pauseExam();
               if (context.mounted) {
                 Navigator.of(context).popUntil((route) => route.isFirst);
               }
@@ -77,50 +71,36 @@ class _ExamScreenState extends State<ExamScreen> {
     final glow = exam.avatarGlowColor;
 
     final rawTopic = status?.currentConceptId ?? '';
-    final topicName = exam.isDirectTestMode
-        ? '⚡ Test Vocale Diretto'
-        : (rawTopic.isNotEmpty ? rawTopic.replaceAll('_', ' ') : 'Simulazione Orale');
+    final topicName = rawTopic.isNotEmpty ? rawTopic.replaceAll('_', ' ') : 'Simulazione Orale';
 
     final currentQuestion = exam.currentAiQuestion;
 
     String stateLabel;
-    if (exam.isDirectTestMode) {
-      if (exam.isAiSpeaking) {
+    switch (mood) {
+      case AvatarAgentMood.speaking:
         stateLabel = 'Docente AI sta parlando';
-      } else if (exam.isStudentSpeaking) {
+        break;
+      case AvatarAgentMood.listening:
         stateLabel = 'In ascolto della tua voce...';
-      } else if (exam.isAiThinking) {
-        stateLabel = 'Elaborazione risposta...';
-      } else {
-        stateLabel = '⚡ Connessione Diretta Gemini';
-      }
-    } else {
-      switch (mood) {
-        case AvatarAgentMood.speaking:
-          stateLabel = 'Docente AI sta parlando';
-          break;
-        case AvatarAgentMood.listening:
-          stateLabel = 'In ascolto della tua voce...';
-          break;
-        case AvatarAgentMood.thinking:
-          stateLabel = 'Elaborazione socratica';
-          break;
-        case AvatarAgentMood.scaffolding:
-          stateLabel = 'Guida personalizzata';
-          break;
-        case AvatarAgentMood.narrowing:
-          stateLabel = 'Approfondimento mirato';
-          break;
-        case AvatarAgentMood.collision:
-          stateLabel = 'Chiarimento concettuale';
-          break;
-        case AvatarAgentMood.paused:
-          stateLabel = 'Sessione in pausa';
-          break;
-        case AvatarAgentMood.idle:
-          stateLabel = 'Pronta per il tuo intervento';
-          break;
-      }
+        break;
+      case AvatarAgentMood.thinking:
+        stateLabel = 'Elaborazione socratica';
+        break;
+      case AvatarAgentMood.scaffolding:
+        stateLabel = 'Guida personalizzata';
+        break;
+      case AvatarAgentMood.narrowing:
+        stateLabel = 'Approfondimento mirato';
+        break;
+      case AvatarAgentMood.collision:
+        stateLabel = 'Chiarimento concettuale';
+        break;
+      case AvatarAgentMood.paused:
+        stateLabel = 'Sessione in pausa';
+        break;
+      case AvatarAgentMood.idle:
+        stateLabel = 'Pronta per il tuo intervento';
+        break;
     }
 
     return PopScope(
@@ -160,7 +140,7 @@ class _ExamScreenState extends State<ExamScreen> {
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
                           ),
-                          if (!exam.isDirectTestMode && status != null && status.planStep.isNotEmpty && status.planStep != '0/0')
+                          if (status != null && status.planStep.isNotEmpty && status.planStep != '0/0')
                             Text(
                               'Passo ${status.planStep}',
                               style: TextStyle(
@@ -228,13 +208,13 @@ class _ExamScreenState extends State<ExamScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            exam.isDirectTestMode ? Icons.bolt_rounded : Icons.help_outline_rounded,
+                            Icons.help_outline_rounded,
                             size: 13.5,
                             color: glow,
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            exam.isDirectTestMode ? "TEST DIRETTO STREAMING" : "DOMANDA D'ESAME",
+                            "DOMANDA D'ESAME",
                             style: TextStyle(
                               color: glow,
                               fontSize: 11,
@@ -246,15 +226,11 @@ class _ExamScreenState extends State<ExamScreen> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        exam.isDirectTestMode
-                            ? (exam.isAiSpeaking
-                                ? 'AI in conversazione diretta...'
-                                : 'Parla liberamente. Connessione audio diretta attiva senza database né filtri.')
-                            : (currentQuestion.isNotEmpty
-                                ? currentQuestion
-                                : (exam.isConnected
-                                    ? 'In attesa della domanda del docente...'
-                                    : 'Connessione alla stanza vocale...')),
+                        currentQuestion.isNotEmpty
+                            ? currentQuestion
+                            : (exam.isConnected
+                                ? 'In attesa della domanda del docente...'
+                                : 'Connessione alla stanza vocale...'),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: colors.textPrimary,

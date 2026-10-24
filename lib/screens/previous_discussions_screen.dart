@@ -289,6 +289,7 @@ class PreviousDiscussionsScreen extends StatefulWidget {
                         } else {
                           launchExamWithLoader(
                             context,
+                            directToDots: true,
                             title: 'Ripresa Sessione...',
                             subtitle: 'Connessione con il docente AI in corso...',
                             onConnect: () => exam.resumeExamAndConnect(courseId: item.id),
@@ -971,6 +972,7 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                                 onPressed: () {
                                                   launchExamWithLoader(
                                                     context,
+                                                    directToDots: true,
                                                     title: 'Ripresa Sessione...',
                                                     subtitle: 'Connessione con il docente AI in corso...',
                                                     onConnect: () => context.read<ExamProvider>().resumeExamAndConnect(courseId: item.id),
@@ -994,6 +996,7 @@ class _PreviousDiscussionsScreenState extends State<PreviousDiscussionsScreen> {
                                                 onPressed: () {
                                                   launchExamWithLoader(
                                                     context,
+                                                    directToDots: true,
                                                     title: 'Nuova Simulazione...',
                                                     subtitle: 'Preparazione esame con adattamento...',
                                                     onConnect: () => context.read<ExamProvider>().startNewExam(adapt: true, courseId: item.id),

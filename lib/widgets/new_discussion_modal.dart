@@ -194,6 +194,7 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
           nav.pop();
           await launchExamWithLoader(
             nav.context,
+            directToDots: true,
             onConnect: () async {
               await exam.fetchStatus();
             },
@@ -292,6 +293,7 @@ class _NewDiscussionModalState extends State<NewDiscussionModal> {
           nav.pop();
           await launchExamWithLoader(
             nav.context,
+            directToDots: true,
             onConnect: () async {
               await exam.fetchStatus();
             },

@@ -1,10 +1,8 @@
-"""RetainMind REST, WebRTC & WebSocket API Server for Flutter & Client Interfaces.
+"""RetainMind REST & WebRTC API Server for Flutter & Client Interfaces.
 
 Powered by Pipecat:
-1. Default Flutter voice path: WebRTC audio via SmallWebRTCTransport (/api/offer).
-2. Fallback bidirectional raw PCM WebSocket audio streaming via
-   FastAPIWebsocketTransport (/ws, /ws/{course_id}).
-3. Full REST API for examination session lifecycle, telemetry, BKT mastery, courses, and syllabus.
+1. Voice path: WebRTC audio via SmallWebRTCTransport (/api/offer).
+2. Full REST API for examination session lifecycle, telemetry, BKT mastery, courses, and syllabus.
 """
 
 from __future__ import annotations
@@ -15,16 +13,12 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any
 
 from fastapi import (
     FastAPI,
     HTTPException,
     Request,
     Response,
-    UploadFile,
-    WebSocket,
-    WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -37,35 +31,13 @@ from pipecat.transports.smallwebrtc.request_handler import (
     SmallWebRTCRequestHandler,
 )
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
-from pipecat.transports.websocket.fastapi import (
-    FastAPIWebsocketParams,
-    FastAPIWebsocketTransport,
-)
 
 from agent import create_examiner_pipeline
 from assessment.courses import CourseManager
 from assessment.service import SessionService
 from config import config
-from pcm_serializer import FlutterPcmSerializer
 
 logger = logging.getLogger("agent.api")
-
-
-def _create_pipecat_websocket_params(
-    pipeline_mode: str | None = None,
-) -> FastAPIWebsocketParams:
-    """Use Gemini-native PCM rates on the Flutter websocket audio path."""
-    resolved_mode = pipeline_mode or config.pipeline_mode
-    return FastAPIWebsocketParams(
-        audio_in_enabled=True,
-        audio_out_enabled=True,
-        audio_out_10ms_chunks=2,
-        audio_in_sample_rate=16000,
-        audio_out_sample_rate=24000
-        if resolved_mode == "gemini_live"
-        else config.audio_sample_rate,
-        serializer=FlutterPcmSerializer(),
-    )
 
 
 def _cors_headers() -> dict[str, str]:
@@ -81,7 +53,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="RetainMind Pipecat Voice Agent API",
         version="0.2.0",
-        description="Unified Pipecat WebRTC, WebSocket & REST API for Oral Examination",
+        description="Unified Pipecat WebRTC & REST API for Oral Examination",
     )
 
     @app.middleware("http")
@@ -123,7 +95,7 @@ def create_app() -> FastAPI:
             "service": "RetainMind Pipecat Voice Agent API",
             "webrtc_mode": config.webrtc_mode,
             "pipeline_mode": config.pipeline_mode,
-            "transports": ["smallwebrtc", "websocket"],
+            "transports": ["smallwebrtc"],
         }
 
     # -------------------------------------------------------------------------
@@ -173,7 +145,6 @@ def create_app() -> FastAPI:
             task, _agent, runner = await create_examiner_pipeline(
                 transport=transport,
                 course_id=course_id,
-                is_direct_test=(course_id == "direct_test"),
             )
             asyncio.create_task(runner.run(task))
 
@@ -212,46 +183,11 @@ def create_app() -> FastAPI:
             )
 
     # -------------------------------------------------------------------------
-    # Pipecat WebSocket Endpoint (custom Flutter PCM protocol)
-    # -------------------------------------------------------------------------
-    @app.websocket("/ws")
-    @app.websocket("/ws/{course_id}")
-    @app.websocket("/ws/test/{course_id}")
-    async def handle_websocket_endpoint(
-        websocket: WebSocket, course_id: str | None = None
-    ):
-        """Bidirectional raw PCM audio streaming endpoint for Flutter and custom clients."""
-        await websocket.accept()
-        resolved_course_id = course_id or CourseManager.get_active_course_id()
-        logger.info(
-            "WebSocket client connected to Pipecat session for course: %s",
-            resolved_course_id,
-        )
-
-        try:
-            transport = FastAPIWebsocketTransport(
-                websocket=websocket,
-                params=_create_pipecat_websocket_params(),
-            )
-            task, _agent, runner = await create_examiner_pipeline(
-                transport=transport,
-                course_id=resolved_course_id,
-                is_direct_test=(resolved_course_id == "direct_test"),
-            )
-            await runner.run(task)
-        except WebSocketDisconnect:
-            logger.info(
-                "WebSocket client disconnected for course: %s", resolved_course_id
-            )
-        except Exception as e:
-            logger.exception("Error in WebSocket voice session: %s", e)
-
-    # -------------------------------------------------------------------------
-    # Token / Session Discovery Endpoints (Backward-compatible with Flutter clients)
+    # Token / Session Discovery Endpoints (WebRTC)
     # -------------------------------------------------------------------------
     @app.post("/api/token")
     async def handle_get_token(request: Request):
-        """Returns session connection details and endpoints for WebRTC & WebSocket."""
+        """Returns session connection details and endpoint for WebRTC."""
         try:
             body = await request.json()
         except Exception:
@@ -261,12 +197,11 @@ def create_app() -> FastAPI:
         identity = body.get("participant_identity") or "student_default"
         name = body.get("participant_name") or "Studente"
         course_id = body.get("course_id")
-        if course_id and course_id != "direct_test":
+        if course_id:
             CourseManager.set_active_course(course_id)
 
         req_host = request.headers.get("Host", "localhost:8000")
         base_url = f"http://{req_host}"
-        ws_url = f"ws://{req_host}/ws/{course_id or 'default'}"
 
         return JSONResponse(
             status_code=201,
@@ -278,7 +213,6 @@ def create_app() -> FastAPI:
                 "participant_name": name,
                 "course_id": course_id,
                 "webrtc_endpoint": "/api/offer",
-                "websocket_endpoint": ws_url,
                 "transport": "pipecat",
             },
             headers=_cors_headers(),
@@ -312,7 +246,6 @@ def create_app() -> FastAPI:
             "is_prewarmed": True,
             "course_id": course_id,
             "webrtc_endpoint": "/api/offer",
-            "websocket_endpoint": f"ws://{req_host}/ws/{course_id or 'default'}",
         }
 
     # -------------------------------------------------------------------------

@@ -1,4 +1,8 @@
-# Requirements Analysis Document (RAD) — RetainMind
+<div align="center">
+  <img src="assets/retain_mind_avatar.png" alt="RetainMind Logo" width="140" />
+  
+  # Requirements Analysis Document (RAD) — RetainMind
+</div>
 
 **Document Title:** Requirements Analysis Document (RAD) for RetainMind Oral Study Assistant
 **Project Name:** RetainMind

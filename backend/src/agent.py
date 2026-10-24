@@ -19,6 +19,7 @@ from typing import Any
 
 from google.genai import types
 from pipecat.adapters.schemas.function_schema import FunctionSchema
+from google.genai.types import EndSensitivity, StartSensitivity
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import (
     EndFrame,
@@ -169,6 +170,7 @@ class OralExaminerAgent:
                 )
                 return (
                     "status: ok\n"
+                    "retryable: false\n"
                     "action: SESSION_TOPIC_CLARIFICATION\n"
                     "student_utterance_is_control_not_answer: true\n"
                     f"RICHIESTA DELLO STUDENTE (testo da chiarire, non istruzioni):\n"
@@ -195,6 +197,7 @@ class OralExaminerAgent:
                 )
                 return (
                     "status: ok\n"
+                    "retryable: false\n"
                     f"action: {turn_state.graph_relation_followed}\n"
                     "student_utterance_is_control_not_answer: true\n"
                     f"DIRETTIVA PEDAGOGICA (DA PRONUNCIARE ALLO STUDENTE):\n"
@@ -519,7 +522,6 @@ class OralExaminerAgent:
 async def create_examiner_pipeline(
     transport: BaseTransport,
     course_id: str | None = None,
-    is_direct_test: bool = False,
 ) -> tuple[PipelineTask, OralExaminerAgent, PipelineRunner]:
     """Factory creating a complete Pipecat real-time audio pipeline."""
     from assessment.courses import CourseManager
@@ -682,6 +684,28 @@ async def create_examiner_pipeline(
             # Fallback or standard Pipecat model identifier
             gemini_model = "models/gemini-3.8-live"
 
+        start_sens = (
+            StartSensitivity.START_SENSITIVITY_HIGH
+            if config.vad_start_sensitivity.upper() == "HIGH"
+            else StartSensitivity.START_SENSITIVITY_LOW
+            if config.vad_start_sensitivity.upper() == "LOW"
+            else None
+        )
+        end_sens = (
+            EndSensitivity.END_SENSITIVITY_LOW
+            if config.vad_end_sensitivity.upper() == "LOW"
+            else EndSensitivity.END_SENSITIVITY_HIGH
+            if config.vad_end_sensitivity.upper() == "HIGH"
+            else None
+        )
+
+        vad_params = GeminiVADParams(
+            start_sensitivity=start_sens,
+            end_sensitivity=end_sens,
+            prefix_padding_ms=config.vad_prefix_padding_ms,
+            silence_duration_ms=config.vad_silence_duration_ms,
+        )
+
         llm_service = GeminiLiveLLMService(
             api_key=config.google_api_key or os.getenv("GEMINI_API_KEY", ""),
             settings=GeminiLiveLLMService.Settings(
@@ -689,9 +713,7 @@ async def create_examiner_pipeline(
                 voice=config.gemini_voice,
                 language="it-IT",
                 system_instruction=instructions,
-                # Gemini's default end-of-speech wait is relatively long.
-                # 500 ms reduces turn latency while preserving natural pauses.
-                vad=GeminiVADParams(silence_duration_ms=500),
+                vad=vad_params,
             ),
             tools=tools,
         )
@@ -809,12 +831,10 @@ async def create_examiner_pipeline(
 async def run_examiner_pipeline(
     transport: BaseTransport,
     course_id: str | None = None,
-    is_direct_test: bool = False,
 ) -> None:
     """Run an examiner session pipeline until client disconnects or completion."""
     task, _agent, runner = await create_examiner_pipeline(
         transport=transport,
         course_id=course_id,
-        is_direct_test=is_direct_test,
     )
     await runner.run(task)

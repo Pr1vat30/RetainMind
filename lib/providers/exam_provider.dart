@@ -28,7 +28,6 @@ class ExamProvider with ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.dark;
 
   bool _isLoading = false;
-  bool _isDirectTestMode = false;
   String? _errorMessage;
   Timer? _statusPollingTimer;
 
@@ -58,7 +57,6 @@ class ExamProvider with ChangeNotifier {
   TokenResponse? get prewarmedSession => _prewarmedSession;
   ThemeMode get themeMode => _themeMode;
   bool get isLoading => _isLoading;
-  bool get isDirectTestMode => _isDirectTestMode;
   String? get errorMessage => _errorMessage;
 
   ConnectionStateEnum get connectionState => _pipecatService.connectionState;
@@ -337,33 +335,6 @@ class ExamProvider with ChangeNotifier {
     }
   }
 
-  String _resolvePipecatWsUrl(TokenResponse tokenRes) {
-    // Use the API origin selected by health discovery. The backend may return
-    // localhost in websocket_endpoint (or an insecure ws:// URL behind HTTPS).
-    final apiUri = Uri.parse(_apiService.baseUrl);
-    final endpoint = tokenRes.websocketEndpoint;
-    final endpointUri = endpoint != null && endpoint.isNotEmpty
-        ? Uri.parse(endpoint)
-        : Uri(
-            path:
-                '/ws/${(_currentCourseId != null && _currentCourseId!.isNotEmpty) ? _currentCourseId : tokenRes.roomName}',
-          );
-
-    var host = apiUri.host;
-    if ((host == 'localhost' || host == '127.0.0.1') &&
-        defaultTargetPlatform == TargetPlatform.android) {
-      host = '10.0.2.2';
-    }
-    final scheme = apiUri.scheme == 'https' ? 'wss' : 'ws';
-    return Uri(
-      scheme: scheme,
-      host: host,
-      port: apiUri.hasPort ? apiUri.port : null,
-      path: endpointUri.path,
-      query: endpointUri.hasQuery ? endpointUri.query : null,
-    ).toString();
-  }
-
   String _resolvePipecatSignalingUrl() {
     // Use the reachable API origin selected by health discovery, not the
     // localhost server_url echoed by the backend for requests from a phone.
@@ -421,12 +392,10 @@ class ExamProvider with ChangeNotifier {
 
     try {
       // 1. Check if a prewarmed session matching this course is already available
-      TokenResponse tokenRes;
       if (roomName == null &&
           _prewarmedSession != null &&
           (_prewarmedCourseId == effectiveCourseId ||
               (_prewarmedCourseId == null && effectiveCourseId == null))) {
-        tokenRes = _prewarmedSession!;
         _prewarmedSession = null;
         debugPrint('⚡ Using prewarmed Pipecat session token');
       } else {
@@ -438,7 +407,7 @@ class ExamProvider with ChangeNotifier {
                 : 'oral-exam-${DateTime.now().millisecondsSinceEpoch}');
 
         // Fetch fresh Token from backend REST API
-        tokenRes = await _apiService.fetchToken(
+        await _apiService.fetchToken(
           roomName: effectiveRoomName,
           participantIdentity: participantIdentity,
           participantName: participantName,
@@ -446,18 +415,12 @@ class ExamProvider with ChangeNotifier {
         );
       }
 
-      if (AppConstants.useWebRtcAudio) {
-        final signalingUrl = _resolvePipecatSignalingUrl();
-        debugPrint('🔌 Connecting to Pipecat WebRTC: $signalingUrl');
-        await _pipecatService.connectWebRtc(
-          signalingUrl: signalingUrl,
-          courseId: effectiveCourseId,
-        );
-      } else {
-        final wsUrl = _resolvePipecatWsUrl(tokenRes);
-        debugPrint('🔌 Connecting to Pipecat WebSocket: $wsUrl');
-        await _pipecatService.connect(wsUrl: wsUrl);
-      }
+      final signalingUrl = _resolvePipecatSignalingUrl();
+      debugPrint('🔌 Connecting to Pipecat WebRTC: $signalingUrl');
+      await _pipecatService.connectWebRtc(
+        signalingUrl: signalingUrl,
+        courseId: effectiveCourseId,
+      );
 
       // 3. Start Periodic Telemetry & Transcript Polling
       _startPolling();
@@ -509,6 +472,10 @@ class ExamProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setVolume(double volume) async {
+    await _pipecatService.setVolume(volume);
+  }
+
   Future<void> pauseExam({String? courseId}) async {
     try {
       _stopPolling();
@@ -523,62 +490,6 @@ class ExamProvider with ChangeNotifier {
       _errorMessage = 'Errore pausa: $e';
       notifyListeners();
     }
-  }
-
-  /// Avvia una sessione vocale DIRETTA e ultra-rapida con Gemini Live via Pipecat
-  /// Bypassa completamente database, vettori, piani di studio, OCR ed FSM.
-  Future<void> startDirectTestSession({
-    bool waitForAiInteraction = true,
-  }) async {
-    _isLoading = true;
-    _errorMessage = null;
-    _isDirectTestMode = true;
-    notifyListeners();
-
-    try {
-      final directRoomName =
-          'direct-test-${DateTime.now().millisecondsSinceEpoch}';
-      final tokenRes = await _apiService.fetchToken(
-        roomName: directRoomName,
-        courseId: 'direct_test',
-        participantIdentity: 'tester_${DateTime.now().millisecondsSinceEpoch}',
-        participantName: 'Tester',
-      );
-
-      if (AppConstants.useWebRtcAudio) {
-        final signalingUrl = _resolvePipecatSignalingUrl();
-        debugPrint(
-          '🔌 Direct test connecting to Pipecat WebRTC: $signalingUrl',
-        );
-        await _pipecatService.connectWebRtc(
-          signalingUrl: signalingUrl,
-          courseId: 'direct_test',
-        );
-      } else {
-        final wsUrl = _resolvePipecatWsUrl(tokenRes);
-        debugPrint('🔌 Direct test connecting to Pipecat WebSocket: $wsUrl');
-        await _pipecatService.connect(wsUrl: wsUrl);
-      }
-
-      if (waitForAiInteraction) {
-        await _pipecatService.waitForFirstAiInteraction();
-      }
-    } catch (e) {
-      _errorMessage = e.toString();
-      _isDirectTestMode = false;
-      rethrow;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  /// Termina in modo pulito la sessione vocale diretta senza modificare lo stato dei corsi
-  Future<void> endDirectTest() async {
-    _stopPolling();
-    await _pipecatService.disconnect();
-    _isDirectTestMode = false;
-    notifyListeners();
   }
 
   Future<void> resumeExam({String? courseId}) async {
@@ -610,11 +521,14 @@ class ExamProvider with ChangeNotifier {
     try {
       if (effectiveCourseId != null && effectiveCourseId.isNotEmpty) {
         await _apiService.activateCourse(effectiveCourseId);
-        unawaited(fetchPlan(courseId: effectiveCourseId));
       }
       await _apiService.resumeSession(courseId: effectiveCourseId);
-      await startExam(courseId: effectiveCourseId);
-      unawaited(Future.wait([fetchStatus(), fetchHistory()]));
+      await Future.wait([
+        startExam(courseId: effectiveCourseId),
+        fetchStatus(courseId: effectiveCourseId),
+        fetchPlan(courseId: effectiveCourseId),
+        fetchHistory(),
+      ]);
     } catch (e) {
       _isLoading = false;
       _errorMessage = 'Errore ripresa conversazione: $e';
@@ -631,7 +545,6 @@ class ExamProvider with ChangeNotifier {
     try {
       if (courseId != null && courseId.isNotEmpty) {
         await _apiService.activateCourse(courseId);
-        unawaited(fetchPlan(courseId: courseId));
       }
       // 1. Initialize a completely fresh, isolated discussion on the server
       final res = await _apiService.createNewDiscussion(courseId: courseId);
@@ -642,9 +555,13 @@ class ExamProvider with ChangeNotifier {
               : 'oral-exam-${DateTime.now().millisecondsSinceEpoch}');
       _transcriptTurns = [];
 
-      // 2. Start a Pipecat voice session with the isolated room name
-      await startExam(roomName: assignedRoom, courseId: courseId);
-      unawaited(Future.wait([fetchStatus(), fetchHistory()]));
+      // 2. Start voice session and preload status, plan, and history in parallel
+      await Future.wait([
+        startExam(roomName: assignedRoom, courseId: courseId),
+        fetchStatus(courseId: courseId),
+        fetchPlan(courseId: courseId),
+        fetchHistory(),
+      ]);
     } catch (e) {
       _isLoading = false;
       _errorMessage = 'Errore avvio nuova conversazione: $e';

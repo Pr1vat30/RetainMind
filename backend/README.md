@@ -1,34 +1,14 @@
 # RetainMind Backend
 
-Backend per esami orali e monitoraggio pedagogico basato su **FastAPI** e **Pipecat**. L'app Flutter usa **SmallWebRTC** per l'audio per impostazione predefinita; il trasporto **WebSocket PCM** resta disponibile come fallback.
+Backend per esami orali e monitoraggio pedagogico basato su **FastAPI** e **Pipecat**. L'app Flutter usa **SmallWebRTC** come trasporto vocale esclusivo.
 
-Il server FastAPI ospita REST, sessioni Pipecat e trasporti audio sulla porta `8000`. La modalità vocale predefinita è **Gemini Live** (`AGENT_PIPELINE_MODE=gemini_live`), con modello `gemini-3.8-live` e voce `Aoede`. La pipeline cascaded STT → LLM → TTS è opzionale e si attiva con `AGENT_PIPELINE_MODE=cascaded`.
+Il server FastAPI ospita REST, sessioni Pipecat e signaling WebRTC sulla porta `8000`. La modalità vocale predefinita è **Gemini Live** (`AGENT_PIPELINE_MODE=gemini_live`), con modello `gemini-3.8-live` e voce `Aoede`. La pipeline cascaded STT → LLM → TTS è opzionale e si attiva con `AGENT_PIPELINE_MODE=cascaded`.
 
 ### Trasporto audio Flutter
 
-Flutter si collega per default agli endpoint SmallWebRTC di FastAPI (`POST /api/offer` o `/api/session/webrtc`, con patch ICE su `/api/offer`). Pipecat gestisce la traccia audio WebRTC bidirezionale; il browser/SDK WebRTC si occupa di codec, jitter buffering, acquisizione e riproduzione. Il client chiede echo cancellation, noise suppression e auto gain control.
+Flutter si collega agli endpoint SmallWebRTC di FastAPI (`POST /api/offer` o `/api/session/webrtc`, con patch ICE su `/api/offer`). Pipecat gestisce la traccia audio WebRTC bidirezionale; il browser/SDK WebRTC si occupa di codec, jitter buffering, acquisizione e riproduzione. Il client richiede echo cancellation, noise suppression e auto gain control.
 
-Su Android la configurazione provata usa `MODE_IN_COMMUNICATION` per mantenere acquisizione microfono e routing full-duplex; imposta gli `AudioAttributes` di uscita su `USAGE_MEDIA` e `CONTENT_TYPE_MUSIC`, disabilita l'audio processing hardware WebRTC e richiede 48 kHz. Quindi l'uscita è classificata come media, ma il microfono resta gestito da WebRTC in modalità di comunicazione.
-
-Per tornare al protocollo PCM si compila Flutter con `--dart-define=USE_WEBRTC_AUDIO=false`.
-
-#### Fallback WebSocket PCM
-
-Il client si collega a `/ws/{course_id}` (o `/ws` per il corso attivo) e invia PCM signed 16-bit little-endian, mono, a 16 kHz. Gemini Live restituisce PCM mono a 24 kHz. Ogni messaggio audio è JSON con payload Base64:
-
-```json
-{
-  "event": "audio",
-  "audio": {
-    "encoding": "pcm_s16le",
-    "sampleRate": 16000,
-    "channels": 1,
-    "payload": "..."
-  }
-}
-```
-
-Il server usa la stessa struttura in uscita con `sampleRate: 24000`. L'evento `clear` interrompe e svuota l'audio accodato durante un'interruzione dell'assistente. La serializzazione è gestita da `src/pcm_serializer.py`; evitare conversioni μ-law o ricampionamenti aggiuntivi nel client.
+Su Android la configurazione usa `MODE_NORMAL` (`AndroidAudioMode.normal`) con focus `gain` per un'uscita audio puramente multimediale (`USAGE_MEDIA`, `STREAM_MUSIC`, `CONTENT_TYPE_MUSIC`), con routing forzato (`forceHandleAudioRouting: true`) e sample rate a 48 kHz. Per preservare il microfono senza innescare i filtri telefonici hardware dell'OS, il processamento audio hardware è disabilitato (`androidUseHardwareAudioProcessing: false`), affidando echo cancellation e noise suppression al modulo software WebRTC APM.
 
 La generazione dell'ontologia, del piano e dei materiali da argomento usa `gemini-3.5-flash-lite` come modello predefinito (`PLAN_GENERATION_MODEL`). È indipendente dal modello vocale Gemini Live (`GEMINI_LIVE_MODEL`), predefinito a `gemini-3.8-live` con voce `Aoede`. La pipeline vocale `cascaded` è opzionale; i provider effettivi dipendono dalle chiavi e dal codice/configurazione del ramo selezionato.
 
@@ -45,6 +25,24 @@ Le istruzioni comuni sono definite in `src/prompts/examiner.py`; titolo del cors
 
 Il rilevamento di chiarimenti e digressioni usa corrispondenze lessicali/stem con la domanda e il materiale recuperato: è un filtro prudente di instradamento, non un classificatore semantico né un voto. Gli eventi di instradamento conservano la frase originale per la revisione dei falsi positivi.
 
+### Protocollo e strumenti dell'agente vocale (Gemini 3.8 Live & Pipecat)
+
+L'agente espone gli strumenti al modello vocale tramite `FunctionSchema` con risposte conformi al protocollo strutturato (`status: ok`, `retryable: false`):
+
+1. **`evaluate_and_advance(student_response: str)`**: Valuta la risposta sostanziale dello studente aggiornando BKT e FSM pedagogica. Instrada le digressioni fuori tema (`SESSION_OFF_TOPIC_REDIRECT`) senza penalità né consumo di tentativi.
+2. **`pause_session()`**: Mette in pausa l'esame su richiesta esplicita dello studente e persiste lo stato su disco.
+3. **`resume_session()`**: Riprende la sessione precedentemente sospesa da dove era stata interrotta.
+4. **`repeat_examination()`**: Riavvia l'esame dal principio per consentire una nuova iterazione e il confronto diagnostico dei progressi.
+5. **`get_exam_progress()`**: Restituisce il punteggio medio BKT, lo stato di padronanza dei concetti e i dettagli del piano.
+6. **`get_exam_history_and_comparison()`**: Fornisce un confronto diagnostico cross-iterazione tra il tentativo attuale e quelli precedenti.
+7. **`get_session_summary()`**: Genera il riepilogo finale diagnostico e di Root-Cause Analysis (RCA) al termine dell'esame.
+
+**Regole di conversazione e guardrail vocali:**
+- Massimo 2 chiamate a strumenti consecutive senza parlato all'utente.
+- Pronuncia immediata della direttiva pedagogica restituita dallo strumento.
+- Nessun uso di markdown, elenchi puntati o sintassi codice nel parlato generato (testo piano per sintesi vocale).
+- Politica anti-ripetizione: divieto di riproporre la stessa identica formulazione due volte consecutive.
+
 ---
 
 ## 🏛️ Architettura dei Componenti
@@ -55,7 +53,7 @@ Il backend è strutturato in moduli indipendenti e cooperanti secondo principi d
 backend/
 ├── src/
 │   ├── agent.py                  # Pipeline vocale Pipecat (Gemini Live predefinito; cascade opzionale)
-│   ├── api.py                    # Server unificato FastAPI (REST, SmallWebRTC e WebSocket /ws)
+│   ├── api.py                    # Server unificato FastAPI (REST e SmallWebRTC)
 │   ├── config.py                 # Gestione centralizzata della configurazione e variabili d'ambiente
 │   ├── ingest.py                 # Script di ingestione materiali accademici (PDF/MD/TXT -> Graph + Vector)
 │   ├── session_cli.py            # CLI da terminale per ispezione stato esame, pause, resume e report

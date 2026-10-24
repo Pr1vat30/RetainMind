@@ -107,7 +107,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     });
 
-    testWidgets('Renders Direct Benchmark mode UI when isDirectTestMode is true', (tester) async {
+    testWidgets('Renders standard exam calling UI and exit dialog', (tester) async {
       final provider = ExamProvider();
 
       await tester.pumpWidget(
@@ -119,8 +119,6 @@ void main() {
         ),
       );
       await tester.pump(const Duration(milliseconds: 200));
-
-      expect(provider.isDirectTestMode, isFalse);
 
       // Tap End Call and verify exit dialog text in standard mode
       await tester.tap(find.byIcon(Icons.call_end_rounded));

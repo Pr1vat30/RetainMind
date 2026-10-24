@@ -47,7 +47,7 @@ void main() {
       expect(midDark.primaryContainer, const Color(0xFF38BDF8));
     });
 
-    test('ExamProvider defaults to ThemeMode.dark and can switch to ThemeMode.light', () {
+    testWidgets('ExamProvider defaults to ThemeMode.dark and can switch to ThemeMode.light', (tester) async {
       final provider = ExamProvider();
       expect(provider.themeMode, ThemeMode.dark);
 

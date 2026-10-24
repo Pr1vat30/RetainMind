@@ -197,5 +197,57 @@ void main() {
       expect(caughtError, isNotNull);
       expect(caughtError.toString(), contains('Network timeout test'));
     });
+
+    testWidgets('launchExamWithLoader with directToDots: true goes directly to 3 dots without banner flight', (tester) async {
+      final examProvider = ExamProvider();
+      bool onConnectCalled = false;
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ExamProvider>.value(value: examProvider),
+          ],
+          child: MaterialApp(
+            home: Builder(
+              builder: (ctx) {
+                return Scaffold(
+                  body: Center(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        launchExamWithLoader(
+                          ctx,
+                          directToDots: true,
+                          onConnect: () async {
+                            onConnectCalled = true;
+                          },
+                        );
+                      },
+                      child: const Text('Direct Launch'),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      // Tap launch
+      await tester.tap(find.text('Direct Launch'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Verify overlay is mounted directly with 3 dots wave
+      expect(find.byType(ExamLaunchTransitionOverlay), findsOneWidget);
+      expect(find.byType(BloubMorphingAvatar), findsOneWidget);
+
+      // Advance fast direct loading (500ms)
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(onConnectCalled, isTrue);
+
+      // Complete transition into ExamScreen
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+    });
   });
 }

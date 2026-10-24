@@ -321,26 +321,39 @@ class ResponseEvaluator:
                 if cw.name.lower() in resp_lower or cw.id.lower() in resp_lower:
                     contrasting_matches.append(cw.name)
 
-        target_terms = {
-            token
-            for token in re.findall(r"\w+", target_concept.name.lower())
-            if token not in STOP_WORDS and len(token) > 2
-        }
-        target_mentioned = any(
-            token in resp_lower or (len(token) >= 4 and token[:4] in resp_lower)
-            for token in target_terms
-        )
-        if contrasting_matches and not target_mentioned:
-            return EvaluationDetail(
-                evaluation_result=EvaluationResultType.MISCONCEPTION,
-                assessed_concept_id=target_concept.id,
-                confidence=0.90,
-                reasoning=f"Student confused '{target_concept.name}' with contrasting concept '{contrasting_matches[0]}'.",
-                missing_concepts=[target_concept.name],
-                hesitation_detected=is_hesitant,
-                filler_word_count=filler_count,
-                pause_duration=pause_duration,
+        if contrasting_matches:
+            contrastive_markers = {"differenza", "invece", "mentre", "rispetto", "non"}
+            has_contrastive_marker = any(
+                re.search(rf"\b{re.escape(w)}\b", resp_lower)
+                for w in contrastive_markers
             )
+            target_summary_terms = {
+                token
+                for token in re.findall(r"\w+", target_concept.summary.lower())
+                if token not in STOP_WORDS
+                and token not in {"misura", "concetto", "definizione"}
+                and len(token) > 2
+            }
+            has_target_explanation = (
+                sum(
+                    1
+                    for token in target_summary_terms
+                    if token in resp_lower
+                    or (len(token) >= 4 and token[:4] in resp_lower)
+                )
+                >= 2
+            )
+            if not (has_contrastive_marker and has_target_explanation):
+                return EvaluationDetail(
+                    evaluation_result=EvaluationResultType.MISCONCEPTION,
+                    assessed_concept_id=target_concept.id,
+                    confidence=0.90,
+                    reasoning=f"Student confused '{target_concept.name}' with contrasting concept '{contrasting_matches[0]}'.",
+                    missing_concepts=[target_concept.name],
+                    hesitation_detected=is_hesitant,
+                    filler_word_count=filler_count,
+                    pause_duration=pause_duration,
+                )
 
         # 3. Check for Hesitation
         if is_hesitant and (filler_count >= 2 or len(resp_lower) < 45):

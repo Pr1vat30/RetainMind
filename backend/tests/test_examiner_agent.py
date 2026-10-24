@@ -192,7 +192,11 @@ def test_greeting_logic_welcome_vs_bentornato():
         plan_id="p1",
         title="Programmazione a Oggetti",
         concept_order=["c1"],
-        items={"c1": ConceptPlanItem(concept_id="c1", concept_name="Polimorfismo", planned_question=q)},
+        items={
+            "c1": ConceptPlanItem(
+                concept_id="c1", concept_name="Polimorfismo", planned_question=q
+            )
+        },
     )
 
     # 1. First time upload: history is empty
@@ -227,7 +231,9 @@ def test_greeting_logic_welcome_vs_bentornato():
         {"turn": 1, "student_transcript": "Una risposta", "evaluation": "ACCURATE"}
     ]
 
-    is_resumed_active = bool(manager_resumed.history or manager_resumed.iterations_history)
+    is_resumed_active = bool(
+        manager_resumed.history or manager_resumed.iterations_history
+    )
     assert is_resumed_active is True
 
     curr_c = manager_resumed.current_concept_id.replace("_", " ").title()
@@ -248,8 +254,11 @@ def test_room_name_course_resolution():
         match = re.match(r"^oral-exam-(.+)-(\d+)$", room_name)
         if match and match.group(1) != "room" and not match.group(1).isdigit():
             return match.group(1)
-        elif room_name.startswith("oral-exam-") and room_name not in ("oral-exam", "oral-exam-room"):
-            candidate = room_name[len("oral-exam-"):]
+        elif room_name.startswith("oral-exam-") and room_name not in (
+            "oral-exam",
+            "oral-exam-room",
+        ):
+            candidate = room_name[len("oral-exam-") :]
             if candidate and not candidate.isdigit():
                 return candidate
         return None
@@ -326,6 +335,3 @@ async def test_gemini_38_live_structured_tool_responses():
     resume = await agent.resume_session(None)
     assert "status: ok" in resume
     assert "retryable: false" in resume
-
-
-

@@ -32,6 +32,31 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _backendHealthy = false;
   final GlobalKey _bannerAvatarKey = GlobalKey();
 
+  // Inactivity / Sleep Timer for the banner companion avatar
+  Timer? _avatarSleepTimer;
+  bool _isAvatarDrowsy = false;
+  static const Duration _avatarInactivityTimeout = Duration(seconds: 45);
+
+  void _resetAvatarSleepTimer() {
+    _avatarSleepTimer?.cancel();
+    if (_isAvatarDrowsy && mounted) {
+      setState(() {
+        _isAvatarDrowsy = false;
+      });
+    }
+    _avatarSleepTimer = Timer(_avatarInactivityTimeout, () {
+      if (mounted) {
+        setState(() {
+          _isAvatarDrowsy = true;
+        });
+      }
+    });
+  }
+
+  void _wakeUpAvatar() {
+    _resetAvatarSleepTimer();
+  }
+
   // Cached layout measurements for dynamic pills to avoid recomputing TextPainter on every tick
   String? _cachedTopPillText;
   String? _cachedBottomPillText;
@@ -50,7 +75,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _resetAvatarSleepTimer();
+    final provider = context.read<ExamProvider>();
+    if (provider.sessionStatus != null || provider.historyItems.isNotEmpty) {
+      _backendHealthy = true;
+    }
     _refreshAll();
+  }
+
+  @override
+  void dispose() {
+    _avatarSleepTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _refreshAll() async {
@@ -86,6 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onConnect: () => exam.resumeExamAndConnect(),
         startCenter: _getBannerAvatarCenter(),
         startSize: 105.0,
+        directToDots: false,
         initialSubtitle: 'Caricamento informazioni e messaggi...',
         completedSubtitle: 'Pronto! Si comincia 😉',
       );
@@ -109,37 +146,11 @@ class _HomeScreenState extends State<HomeScreen> {
       await launchExamWithLoader(
         context,
         onConnect: () => exam.startNewExam(adapt: adapt),
-        startCenter: _getBannerAvatarCenter(),
-        startSize: 105.0,
+        directToDots: true,
         initialSubtitle: adapt
             ? 'Preparazione sessione adattiva...'
             : 'Creazione nuova sessione d\'esame...',
         completedSubtitle: 'Pronto! Si comincia 😉',
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: colors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusSm)),
-            content: Text(exam.errorMessage ?? e.toString()),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _startDirectTest() async {
-    final exam = context.read<ExamProvider>();
-    try {
-      await launchExamWithLoader(
-        context,
-        onConnect: () => exam.startDirectTestSession(),
-        startCenter: _getBannerAvatarCenter(),
-        startSize: 105.0,
-        initialSubtitle: 'Connessione vocale diretta (Gemini Live)...',
-        completedSubtitle: 'Pronto! Parla liberamente ⚡',
       );
     } catch (e) {
       if (mounted) {
@@ -349,90 +360,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             const SizedBox(height: 4),
                             Text(
                               'Nessun file necessario: l\'IA crea l\'intero programma da un tema a scelta.',
-                              style: TextStyle(
-                                color: colors.textSecondary,
-                                fontSize: 12,
-                                height: 1.3,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.chevron_right, color: colors.textSecondary),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Option 3: Direct Voice Test (Zero Latency / No DB Benchmark)
-              InkWell(
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _startDirectTest();
-                },
-                borderRadius: BorderRadius.circular(AppConstants.radiusLg),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: colors.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(AppConstants.radiusLg),
-                    border: Border.all(
-                      color: colors.primaryGlow.withValues(alpha: 0.5),
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: colors.primaryGlow.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(AppConstants.radiusSm),
-                        ),
-                        child: Icon(Icons.bolt_rounded, color: colors.primaryGlow, size: 22),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    'Test Vocale Diretto (Zero Latenza)',
-                                    style: TextStyle(
-                                      color: colors.textPrimary,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                  decoration: BoxDecoration(
-                                    color: colors.primaryGlow.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    'BENCHMARK',
-                                    style: TextStyle(
-                                      color: colors.primaryGlow,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Connessione vocale pura senza database, vettori o piani d\'esame.',
                               style: TextStyle(
                                 color: colors.textSecondary,
                                 fontSize: 12,
@@ -740,11 +667,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: colors.background,
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _refreshAll,
-          color: colors.primaryContainer,
-          backgroundColor: colors.surfaceContainerHigh,
-          child: SingleChildScrollView(
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => _resetAvatarSleepTimer(),
+          child: RefreshIndicator(
+            onRefresh: _refreshAll,
+            color: colors.primaryContainer,
+            backgroundColor: colors.surfaceContainerHigh,
+            child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 100),
             child: Column(
@@ -797,15 +727,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     Row(
                       children: [
-                        IconButton(
-                          icon: Icon(
-                            Icons.bolt_rounded,
-                            size: 24,
-                            color: colors.primaryGlow,
-                          ),
-                          tooltip: 'Test Vocale Diretto (Zero Latenza)',
-                          onPressed: _startDirectTest,
-                        ),
                         IconButton(
                           icon: Icon(
                             Icons.notifications_none_rounded,
@@ -1079,9 +1000,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Center(
                           child: GrokAvatar(
                             key: _bannerAvatarKey,
-                            mood: isPaused ? AvatarAgentMood.paused : AvatarAgentMood.idle,
+                            mood: _isAvatarDrowsy ? AvatarAgentMood.paused : AvatarAgentMood.idle,
                             size: 105,
                             glowColor: Colors.white,
+                            onTap: _wakeUpAvatar,
                           ),
                         ),
                       ),
@@ -1649,7 +1571,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildProgressStatCard({

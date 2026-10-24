@@ -5,18 +5,20 @@ import '../screens/exam_screen.dart';
 import 'avatar/bloub_morphing_avatar.dart';
 
 /// Launches the AI oral examination calling screen ([ExamScreen]) with a high-fidelity
-/// Bloub avatar loading animation inspired by https://github.com/jeremy-prt/bloub.
+/// Bloub avatar loading animation.
 ///
-/// Animation choreography:
-/// 1. The Bloub avatar expands from the Hero banner position and glides towards the center.
-/// 2. It morphs into 3 bouncing, pulsating glowing dots (● ● ●) while loading session data & messages.
-/// 3. Once loading is complete, the dots merge back into the sphere and the avatar winks (fa l'occhiolino).
-/// 4. The avatar glides into the exact position of the active call screen ([ExamScreen]) and seamlessly transitions.
+/// Behavior:
+/// - When [directToDots] is true (or [startCenter] is null), the overlay appears directly
+///   centered with the 3 pulsating wave dots (● ● ●), without any flight from the banner.
+/// - When [directToDots] is false and [startCenter] is provided (e.g. clicking the main CTA
+///   button on the Home banner), the avatar glides from the banner to the center, morphs into
+///   the 3 wave dots while connecting, and seamlessly transitions into the call.
 Future<void> launchExamWithLoader(
   BuildContext context, {
   required Future<void> Function() onConnect,
   Offset? startCenter,
   double? startSize,
+  bool directToDots = false,
   String? title,
   String? subtitle,
   String initialSubtitle = 'Caricamento informazioni e messaggi...',
@@ -24,6 +26,7 @@ Future<void> launchExamWithLoader(
 }) async {
   final nav = Navigator.of(context, rootNavigator: true);
   final effectiveInitialSubtitle = subtitle ?? initialSubtitle;
+  final effectiveDirectToDots = directToDots || startCenter == null;
 
   try {
     final result = await nav.push<Object?>(
@@ -35,15 +38,22 @@ Future<void> launchExamWithLoader(
             onConnect: onConnect,
             startCenter: startCenter,
             startSize: startSize,
+            directToDots: effectiveDirectToDots,
             title: title,
             initialSubtitle: effectiveInitialSubtitle,
             completedSubtitle: completedSubtitle,
           );
         },
         transitionsBuilder: (ctx, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
+          return FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            ),
+            child: child,
+          );
         },
-        transitionDuration: const Duration(milliseconds: 250),
+        transitionDuration: const Duration(milliseconds: 220),
       ),
     );
 
@@ -59,6 +69,7 @@ class ExamLaunchTransitionOverlay extends StatefulWidget {
   final Future<void> Function() onConnect;
   final Offset? startCenter;
   final double? startSize;
+  final bool directToDots;
   final String? title;
   final String initialSubtitle;
   final String completedSubtitle;
@@ -68,6 +79,7 @@ class ExamLaunchTransitionOverlay extends StatefulWidget {
     required this.onConnect,
     this.startCenter,
     this.startSize,
+    this.directToDots = false,
     this.title,
     this.initialSubtitle = 'Caricamento informazioni e messaggi...',
     this.completedSubtitle = 'Pronto! Si comincia 😉',
@@ -83,24 +95,23 @@ class _ExamLaunchTransitionOverlayState extends State<ExamLaunchTransitionOverla
   late AnimationController _flightToCenterController;
   late Animation<double> _flightToCenterCurved;
 
-  // Dots morph controller: sphere -> 3 dots (forward) and 3 dots -> sphere (reverse)
+  // Dots morph controller: sphere (0.0) <-> 3 dots (1.0)
   late AnimationController _dotsMorphController;
   late Animation<double> _dotsMorphCurved;
 
-  // Wave bouncing controller for the three dots
+  // Wave bouncing controller for the 3 glowing dots
   late AnimationController _dotsWaveController;
 
   // Living breathing pulse controller
   late AnimationController _breathController;
 
-  // Wink controller: executes playful wink upon completion
+  // Wink controller: playful cheerful wink
   late AnimationController _winkController;
 
   // Flight controller: screen center -> call avatar position
   late AnimationController _flightToCallController;
   late Animation<double> _flightToCallCurved;
 
-  // Subtitle text state
   late String _currentSubtitle;
   bool _isDataLoaded = false;
 
@@ -109,55 +120,62 @@ class _ExamLaunchTransitionOverlayState extends State<ExamLaunchTransitionOverla
     super.initState();
     _currentSubtitle = widget.initialSubtitle;
 
-    // 1. Flight to Center (480ms)
+    // 1. Flight to Center (280ms, snappy easeOutCubic)
     _flightToCenterController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 480),
+      duration: const Duration(milliseconds: 280),
     );
     _flightToCenterCurved = CurvedAnimation(
       parent: _flightToCenterController,
-      curve: Curves.easeOutBack,
+      curve: Curves.easeOutCubic,
     );
 
-    // 2. Dots Morph (360ms)
+    // 2. Dots Morph (180ms)
     _dotsMorphController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 360),
+      duration: const Duration(milliseconds: 180),
     );
     _dotsMorphCurved = CurvedAnimation(
       parent: _dotsMorphController,
       curve: Curves.easeInOutCubic,
     );
 
-    // 3. Dots Wave Bounce (looping 1100ms)
+    // 3. Dots Wave Bounce (looping 900ms)
     _dotsWaveController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1100),
+      duration: const Duration(milliseconds: 900),
     );
 
-    // 4. Subtle Living Breath (looping 3000ms)
+    // 4. Living Breath (looping 2600ms)
     _breathController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3000),
+      duration: const Duration(milliseconds: 2600),
     )..repeat();
 
-    // 5. Wink Controller (450ms)
+    // 5. Wink Controller (200ms)
     _winkController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 450),
+      duration: const Duration(milliseconds: 200),
     );
 
-    // 6. Flight to Call Position (380ms)
+    // 6. Flight to Call Position (180ms)
     _flightToCallController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 380),
+      duration: const Duration(milliseconds: 180),
     );
     _flightToCallCurved = CurvedAnimation(
       parent: _flightToCallController,
-      curve: Curves.easeInOutCubic,
+      curve: Curves.easeOutCubic,
     );
 
-    // Kick off choreography after first layout pass
+    // If directToDots is enabled, jump directly into centered 3-dots state immediately
+    if (widget.directToDots) {
+      _flightToCenterController.value = 1.0;
+      _dotsMorphController.value = 1.0;
+      _dotsWaveController.repeat();
+    }
+
+    // Execute the sequence after first build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _runFullSequence();
     });
@@ -176,58 +194,109 @@ class _ExamLaunchTransitionOverlayState extends State<ExamLaunchTransitionOverla
 
   Future<void> _runFullSequence() async {
     try {
-      // Phase 1: Fly from banner to screen center
-      await _flightToCenterController.forward();
-
-      // Phase 2: Morph into 3 pulsating dots
-      _dotsWaveController.repeat();
-      await _dotsMorphController.forward();
-
-      // Phase 3: Execute background loading while 3 dots bounce in wave motion
-      // Enforce a minimum display time of 1100ms so the morph animation is appreciated
       final startTime = DateTime.now();
-      await widget.onConnect();
-      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
-      if (elapsed < 1100) {
-        await Future.delayed(Duration(milliseconds: 1100 - elapsed));
+
+      if (widget.directToDots) {
+        // --- DIRECT TO 3 DOTS (NO TRANSITION FROM BANNER) ---
+        // Connect and load session in parallel with active 3-dots wave
+        await widget.onConnect();
+
+        // Enforce a small smooth threshold (420ms) so dots don't flash instantaneously
+        final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+        if (elapsed < 420) {
+          await Future.delayed(Duration(milliseconds: 420 - elapsed));
+        }
+
+        if (!mounted) return;
+
+        setState(() {
+          _isDataLoaded = true;
+          _currentSubtitle = widget.completedSubtitle;
+        });
+
+        _dotsWaveController.stop();
+        await _dotsMorphController.reverse();
+
+        if (!mounted) return;
+
+        // Transition seamlessly into ExamScreen
+        Navigator.pushReplacement(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (_, _, _) => const ExamScreen(),
+            transitionsBuilder: (ctx, animation, secondaryAnimation, child) {
+              return FadeTransition(
+                opacity: CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutCubic,
+                ),
+                child: child,
+              );
+            },
+            transitionDuration: const Duration(milliseconds: 200),
+          ),
+        );
+      } else {
+        // --- FULL BANNER TRANSITION (ONLY FROM MAIN HOME BUTTON) ---
+        // Launch onConnect concurrently so network time overlaps with banner flight
+        final connectFuture = widget.onConnect();
+
+        // Phase 1: Glide from banner to center
+        await _flightToCenterController.forward();
+
+        // Phase 2: Morph smoothly into 3 wave dots
+        _dotsWaveController.repeat();
+        await _dotsMorphController.forward();
+
+        // Phase 3: Wait for connection/loading to finish
+        await connectFuture;
+        final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+        if (elapsed < 650) {
+          await Future.delayed(Duration(milliseconds: 650 - elapsed));
+        }
+
+        if (!mounted) return;
+
+        setState(() {
+          _isDataLoaded = true;
+          _currentSubtitle = widget.completedSubtitle;
+        });
+
+        // Phase 4: Stop wave & morph back to avatar sphere
+        _dotsWaveController.stop();
+        await _dotsMorphController.reverse();
+
+        if (!mounted) return;
+
+        // Phase 5: Playful quick wink
+        await _winkController.forward();
+        await _winkController.reverse();
+
+        if (!mounted) return;
+
+        // Phase 6: Glide to call avatar position
+        await _flightToCallController.forward();
+
+        if (!mounted) return;
+
+        // Phase 7: Transition into ExamScreen
+        Navigator.pushReplacement(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (_, _, _) => const ExamScreen(),
+            transitionsBuilder: (ctx, animation, secondaryAnimation, child) {
+              return FadeTransition(
+                opacity: CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutCubic,
+                ),
+                child: child,
+              );
+            },
+            transitionDuration: const Duration(milliseconds: 220),
+          ),
+        );
       }
-
-      if (!mounted) return;
-
-      setState(() {
-        _isDataLoaded = true;
-        _currentSubtitle = widget.completedSubtitle;
-      });
-
-      // Phase 4: Stop wave & morph back into single avatar sphere
-      _dotsWaveController.stop();
-      await _dotsMorphController.reverse();
-
-      if (!mounted) return;
-
-      // Phase 5: Cheerful Wink (fa l'occhiolino)
-      await _winkController.forward();
-      await Future.delayed(const Duration(milliseconds: 320));
-      await _winkController.reverse();
-
-      if (!mounted) return;
-
-      // Phase 6: Fly smoothly to call screen position
-      await _flightToCallController.forward();
-
-      if (!mounted) return;
-
-      // Phase 7: Transition into ExamScreen seamlessly
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, _, _) => const ExamScreen(),
-          transitionsBuilder: (ctx, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 260),
-        ),
-      );
     } catch (e) {
       if (mounted) {
         Navigator.pop(context, e);
@@ -270,21 +339,29 @@ class _ExamLaunchTransitionOverlayState extends State<ExamLaunchTransitionOverla
           _flightToCallController,
         ]),
         builder: (context, _) {
-          // Compute current Avatar Center and Size
           final tCenter = _flightToCenterCurved.value;
           final tCall = _flightToCallCurved.value;
 
           Offset currentCenter;
           double currentSize;
 
-          if (tCall > 0.0) {
-            // Gliding from center to call position
-            currentCenter = Offset.lerp(centerTarget, callTarget, tCall)!;
-            currentSize = centerSize + ((callSize - centerSize) * tCall);
+          if (widget.directToDots) {
+            // In direct mode: stays in center until call transition
+            if (tCall > 0.0) {
+              currentCenter = Offset.lerp(centerTarget, callTarget, tCall)!;
+              currentSize = centerSize + ((callSize - centerSize) * tCall);
+            } else {
+              currentCenter = centerTarget;
+              currentSize = centerSize;
+            }
           } else {
-            // Gliding from banner to center
-            currentCenter = Offset.lerp(bannerCenter, centerTarget, tCenter)!;
-            currentSize = bannerSize + ((centerSize - bannerSize) * tCenter);
+            if (tCall > 0.0) {
+              currentCenter = Offset.lerp(centerTarget, callTarget, tCall)!;
+              currentSize = centerSize + ((callSize - centerSize) * tCall);
+            } else {
+              currentCenter = Offset.lerp(bannerCenter, centerTarget, tCenter)!;
+              currentSize = bannerSize + ((centerSize - bannerSize) * tCenter);
+            }
           }
 
           final dotsMorph = _dotsMorphCurved.value;
@@ -292,28 +369,32 @@ class _ExamLaunchTransitionOverlayState extends State<ExamLaunchTransitionOverla
           final breath = _breathController.value;
           final wink = _winkController.value;
 
-          // Background backdrop opacity
-          final bgAlpha = (0.78 + (tCenter * 0.18) - (tCall * 0.15)).clamp(0.0, 0.96);
+          // Background backdrop opacity (smooth gradient)
+          final bgAlpha = widget.directToDots
+              ? 0.90
+              : (0.78 + (tCenter * 0.18) - (tCall * 0.15)).clamp(0.0, 0.96);
 
           return Scaffold(
             backgroundColor: colors.background.withValues(alpha: bgAlpha),
             body: Stack(
               children: [
-                // Subtle radial light ambient aura centered on avatar
+                // Ambient Radial Aura centered on Avatar
                 Positioned(
                   left: currentCenter.dx - (currentSize * 1.2),
                   top: currentCenter.dy - (currentSize * 1.2),
                   width: currentSize * 2.4,
                   height: currentSize * 2.4,
                   child: IgnorePointer(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            colors.primaryContainer.withValues(alpha: 0.18),
-                            Colors.transparent,
-                          ],
+                    child: RepaintBoundary(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              colors.primaryContainer.withValues(alpha: 0.18),
+                              Colors.transparent,
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -336,71 +417,73 @@ class _ExamLaunchTransitionOverlayState extends State<ExamLaunchTransitionOverla
                   ),
                 ),
 
-                // Status Subtitle (visible during loading wave and wink)
-                if (tCenter > 0.6 && tCall < 0.6)
+                // Status Subtitle (visible during loading wave and completion)
+                if ((widget.directToDots || tCenter > 0.6) && tCall < 0.6)
                   Positioned(
                     left: 24,
                     right: 24,
                     top: centerTarget.dy + (centerSize * 0.58) + 16,
-                    child: AnimatedOpacity(
-                      opacity: (dotsMorph > 0.2 || _isDataLoaded) ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 250),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: colors.surfaceContainerLow.withValues(alpha: 0.88),
-                              borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                              border: Border.all(
-                                color: colors.primaryContainer.withValues(alpha: _isDataLoaded ? 0.6 : 0.25),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: colors.cardShadow,
-                                  blurRadius: 18,
-                                  offset: const Offset(0, 6),
+                    child: RepaintBoundary(
+                      child: AnimatedOpacity(
+                        opacity: (dotsMorph > 0.2 || _isDataLoaded) ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: colors.surfaceContainerLow.withValues(alpha: 0.88),
+                                borderRadius: BorderRadius.circular(AppConstants.radiusPill),
+                                border: Border.all(
+                                  color: colors.primaryContainer.withValues(alpha: _isDataLoaded ? 0.6 : 0.25),
                                 ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (!_isDataLoaded) ...[
-                                  SizedBox(
-                                    width: 12,
-                                    height: 12,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.0,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: colors.cardShadow,
+                                    blurRadius: 18,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (!_isDataLoaded) ...[
+                                    SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.0,
+                                        color: colors.primaryContainer,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                  ] else ...[
+                                    Icon(
+                                      Icons.auto_awesome_rounded,
+                                      size: 15,
                                       color: colors.primaryContainer,
                                     ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                ] else ...[
-                                  Icon(
-                                    Icons.auto_awesome_rounded,
-                                    size: 15,
-                                    color: colors.primaryContainer,
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-                                Flexible(
-                                  child: Text(
-                                    _currentSubtitle,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: colors.textPrimary,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: -0.1,
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Flexible(
+                                    child: Text(
+                                      _currentSubtitle,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: colors.textPrimary,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: -0.1,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

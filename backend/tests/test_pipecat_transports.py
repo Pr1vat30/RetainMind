@@ -1,10 +1,8 @@
-"""Tests for Pipecat WebRTC and WebSocket transport endpoints."""
+"""Tests for Pipecat WebRTC transport endpoints."""
 
-import pytest
 from starlette.testclient import TestClient
 
-from api import _create_pipecat_websocket_params, create_app
-from pcm_serializer import FlutterPcmSerializer
+from api import create_app
 
 
 def test_webrtc_offer_endpoint_validation():
@@ -17,21 +15,22 @@ def test_webrtc_offer_endpoint_validation():
     assert "Missing required 'sdp' field" in resp.json()["detail"]
 
 
-def test_flutter_websocket_transport_uses_full_bandwidth_pcm_rates():
-    params = _create_pipecat_websocket_params(pipeline_mode="gemini_live")
-
-    assert params.audio_in_sample_rate == 16000
-    assert params.audio_out_sample_rate == 24000
-    assert params.audio_out_10ms_chunks == 2
-    assert isinstance(params.serializer, FlutterPcmSerializer)
-
-
-@pytest.mark.asyncio
-async def test_websocket_connection_stays_open():
+def test_health_reports_smallwebrtc_only():
     app = create_app()
     client = TestClient(app)
 
-    # The Flutter transport uses the custom PCM protocol; a plain connection
-    # should remain open until the client disconnects.
-    with client.websocket_connect("/ws/test_course") as websocket:
-        assert websocket is not None
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["transports"] == ["smallwebrtc"]
+
+
+def test_token_returns_webrtc_endpoint_only():
+    app = create_app()
+    client = TestClient(app)
+
+    resp = client.post("/api/token", json={"course_id": "classificazione"})
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["webrtc_endpoint"] == "/api/offer"
+    assert "websocket_endpoint" not in data

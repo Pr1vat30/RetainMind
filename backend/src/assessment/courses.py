@@ -69,10 +69,15 @@ class CourseManager:
 
         # Fallback: check if any valid course directory exists in data/courses
         existing = [
-            d for d in cls.COURSES_DIR.iterdir()
+            d
+            for d in cls.COURSES_DIR.iterdir()
             if d.is_dir()
             and d.name != "default_course"
-            and ((d / "metadata.json").exists() or (d / "plan.json").exists() or (d / "state.json").exists())
+            and (
+                (d / "metadata.json").exists()
+                or (d / "plan.json").exists()
+                or (d / "state.json").exists()
+            )
         ]
         if existing:
             first_id = existing[0].name
@@ -80,7 +85,11 @@ class CourseManager:
             return first_id
 
         # Fallback: if root examination_plan exists, migrate it to course
-        candidate_plan_file = cls.ROOT_PLAN_FILE if cls.ROOT_PLAN_FILE.exists() else Path("examination_plan.json")
+        candidate_plan_file = (
+            cls.ROOT_PLAN_FILE
+            if cls.ROOT_PLAN_FILE.exists()
+            else Path("examination_plan.json")
+        )
         if candidate_plan_file.exists():
             default_id = "corso_attuale"
             try:
@@ -219,7 +228,11 @@ class CourseManager:
                     cid = p.parent.name
             if not cid and getattr(manager, "examination_plan", None):
                 plan = manager.examination_plan
-                if getattr(plan, "document_id", None) and plan.document_id not in ("doc_default", "greedy", "examination_plan"):
+                if getattr(plan, "document_id", None) and plan.document_id not in (
+                    "doc_default",
+                    "greedy",
+                    "examination_plan",
+                ):
                     cid = cls.slugify(plan.document_id)
                 elif getattr(plan, "title", None) and plan.title != "esame orale":
                     cid = cls.slugify(plan.title)
@@ -233,7 +246,9 @@ class CourseManager:
             sessions_dir = cdir / "sessions"
             sessions_dir.mkdir(parents=True, exist_ok=True)
 
-            manager_dict = snapshot_dict if snapshot_dict is not None else manager.to_dict()
+            manager_dict = (
+                snapshot_dict if snapshot_dict is not None else manager.to_dict()
+            )
 
             # Save state.json inside course directory
             state_file = cdir / "state.json"
@@ -243,13 +258,25 @@ class CourseManager:
 
             # Persist unified discussion snapshot into session_1.json for backwards-compatibility
             all_turns = [
-                t for t in list(manager.history)
-                if not is_silence_or_noise(t.get("student_response") or t.get("student_transcript") or t.get("transcript") or "")
+                t
+                for t in list(manager.history)
+                if not is_silence_or_noise(
+                    t.get("student_response")
+                    or t.get("student_transcript")
+                    or t.get("transcript")
+                    or ""
+                )
             ]
             for it in manager.iterations_history:
                 it_turns = [
-                    t for t in it.get("history", [])
-                    if not is_silence_or_noise(t.get("student_response") or t.get("student_transcript") or t.get("transcript") or "")
+                    t
+                    for t in it.get("history", [])
+                    if not is_silence_or_noise(
+                        t.get("student_response")
+                        or t.get("student_transcript")
+                        or t.get("transcript")
+                        or ""
+                    )
                 ]
                 all_turns = it_turns + all_turns
 
@@ -372,10 +399,15 @@ class CourseManager:
         items: list[dict[str, Any]] = []
 
         course_dirs = [
-            d for d in cls.COURSES_DIR.iterdir()
+            d
+            for d in cls.COURSES_DIR.iterdir()
             if d.is_dir()
             and d.name != "default_course"
-            and ((d / "metadata.json").exists() or (d / "plan.json").exists() or (d / "state.json").exists())
+            and (
+                (d / "metadata.json").exists()
+                or (d / "plan.json").exists()
+                or (d / "state.json").exists()
+            )
         ]
 
         for idx, d in enumerate(course_dirs):
@@ -428,9 +460,7 @@ class CourseManager:
                         "difficulty": c_obj.get("difficulty", 1.0),
                         "prerequisites": c_obj.get("prerequisites", []),
                         "main_question": (
-                            c_obj.get("planned_question", {}).get(
-                                "main_question", ""
-                            )
+                            c_obj.get("planned_question", {}).get("main_question", "")
                             if isinstance(c_obj.get("planned_question"), dict)
                             else ""
                         ),
@@ -440,9 +470,15 @@ class CourseManager:
             # Calculate mastery and evaluated concepts
             mastered: list[str] = []
             weak: list[str] = []
-            evaluated_turns = [t for t in all_turns if t.get("evaluation_result") or t.get("evaluation")]
+            evaluated_turns = [
+                t
+                for t in all_turns
+                if t.get("evaluation_result") or t.get("evaluation")
+            ]
             for t in evaluated_turns:
-                res = str(t.get("evaluation_result") or t.get("evaluation") or "").upper()
+                res = str(
+                    t.get("evaluation_result") or t.get("evaluation") or ""
+                ).upper()
                 cname = t.get("concept_name") or t.get("concept_id") or ""
                 if not cname:
                     continue
@@ -451,14 +487,27 @@ class CourseManager:
                     mastered.append(cname_clean)
                     if cname_clean in weak:
                         weak.remove(cname_clean)
-                elif res in ("MISCONCEPTION", "VAGUE", "HESITANT", "WEAK", "OFF_TOPIC") and cname_clean not in weak:
+                elif (
+                    res in ("MISCONCEPTION", "VAGUE", "HESITANT", "WEAK", "OFF_TOPIC")
+                    and cname_clean not in weak
+                ):
                     if cname_clean not in mastered:
                         weak.append(cname_clean)
 
-            total_concepts = len(concepts_list) if concepts_list else (len(evaluated_turns) or 1)
-            avg_mastery = round(len(mastered) / total_concepts, 2) if total_concepts > 0 and evaluated_turns else 0.0
+            total_concepts = (
+                len(concepts_list) if concepts_list else (len(evaluated_turns) or 1)
+            )
+            avg_mastery = (
+                round(len(mastered) / total_concepts, 2)
+                if total_concepts > 0 and evaluated_turns
+                else 0.0
+            )
 
-            title = meta.get("title") or plan_data.get("title") or cid.replace("_", " ").title()
+            title = (
+                meta.get("title")
+                or plan_data.get("title")
+                or cid.replace("_", " ").title()
+            )
             filename = meta.get("filename", "")
             file_path = meta.get("file_path", "")
 
@@ -471,7 +520,11 @@ class CourseManager:
             created_at = meta.get("created_at", ts)
             updated_at = meta.get("updated_at", ts)
 
-            status = state_data.get("status") or meta.get("status") or ("ACTIVE" if cid == active_id else "PAUSED")
+            status = (
+                state_data.get("status")
+                or meta.get("status")
+                or ("ACTIVE" if cid == active_id else "PAUSED")
+            )
 
             # Collect all distinct session dates (YYYY-MM-DD) for this course
             session_dates_set: set[str] = set()
@@ -519,7 +572,10 @@ class CourseManager:
             )
 
         # Sort by updated_at / timestamp descending so most recently active discussion is first
-        items.sort(key=lambda x: str(x.get("updated_at") or x.get("timestamp") or ""), reverse=True)
+        items.sort(
+            key=lambda x: str(x.get("updated_at") or x.get("timestamp") or ""),
+            reverse=True,
+        )
         # Re-assign 1-based sequential iteration indices to match sorted order
         for i, item in enumerate(items):
             item["iteration"] = i + 1
@@ -605,7 +661,11 @@ class CourseManager:
             if (
                 not d.is_dir()
                 or d.name == "default_course"
-                or (not (d / "metadata.json").exists() and not (d / "plan.json").exists() and not (d / "state.json").exists())
+                or (
+                    not (d / "metadata.json").exists()
+                    and not (d / "plan.json").exists()
+                    and not (d / "state.json").exists()
+                )
             ):
                 continue
             cid = d.name

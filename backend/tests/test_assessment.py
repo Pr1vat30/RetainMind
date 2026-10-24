@@ -403,20 +403,31 @@ async def test_plan_guided_assessment_progression(tmp_path):
     assert plan.items["concetto_a"].current_attempt == 1
     assert "Indizio su A" in ctx1.pedagogical_directive
 
-    # 2. Turn 2 on Concetto A: Student is vague again (attempt 2 reaches max_attempts) -> Defers A to cyclic queue and advances to Concetto B
-    ctx2, ts2 = await manager.process_student_turn("Cose vaghe e non so.")
+    # 2. Turn 2 on Concetto A: Student is vague (attempt 2 < 3) -> Still on Concetto A with narrowing
+    _ctx2, ts2 = await manager.process_student_turn("Cose vaghe e non so.")
     assert ts2.assessed_concept_id == "concetto_a"
+    assert manager.current_concept_id == "concetto_a"
+    assert plan.items["concetto_a"].current_attempt == 2
+
+    # 3. Turn 3 on Concetto A: Attempt 3 reaches minimum attempts (3) -> Prompts student to choose hint or skip
+    ctx3, ts3 = await manager.process_student_turn("Ancora non saprei proprio.")
+    assert ts3.assessed_concept_id == "concetto_a"
+    assert manager.pending_skip_confirmation == "concetto_a"
+    assert "indizio" in ctx3.pedagogical_directive.lower()
+
+    # 4. Turn 4 on Concetto A: Student explicitly chooses to move on -> Defers A to cyclic queue and advances to B
+    ctx4, _ts4 = await manager.process_student_turn("Passiamo ad altro")
     assert plan.items["concetto_a"].status == PlanItemStatus.DEFERRED
     assert len(plan.deferred_queue) == 1
     assert manager.current_concept_id == "concetto_b"
     assert plan.current_index == 1
-    assert "Nessun problema" in ctx2.pedagogical_directive
+    assert "Va bene, lo riprendiamo più avanti" in ctx4.pedagogical_directive
 
-    # 3. Turn 3 on Concetto B: Student is accurate -> Marks MASTERED and completes plan
-    _ctx3, ts3 = await manager.process_student_turn(
+    # 5. Turn 5 on Concetto B: Student is accurate -> Marks MASTERED and completes plan
+    _ctx5, ts5 = await manager.process_student_turn(
         "Concetto B è il secondo concetto fondamentale spiegato in dettaglio."
     )
-    assert ts3.assessed_concept_id == "concetto_b"
+    assert ts5.assessed_concept_id == "concetto_b"
     assert plan.items["concetto_b"].status == PlanItemStatus.MASTERED
 
     # Test session persistence
@@ -498,12 +509,16 @@ async def test_cyclic_deferred_queue_progression():
         graph_store=gstore, vector_store=vstore, examination_plan=plan
     )
 
-    # 1. Fail Concetto A twice -> Defer to cyclic queue, move to Concetto B
+    # 1. Fail Concetto A (3 attempts) + confirm skip -> Defer to cyclic queue, move to Concetto B
     await manager.process_student_turn("Non lo so")
-    ctx_fail2, _ = await manager.process_student_turn("Non lo so proprio")
+    await manager.process_student_turn("Non lo so proprio")
+    ctx_prompt, _ = await manager.process_student_turn("Ancora non saprei")
+    assert manager.pending_skip_confirmation == "concetto_a"
+    assert "indizio" in ctx_prompt.pedagogical_directive.lower()
+    ctx_fail2, _ = await manager.process_student_turn("Passiamo ad altro")
     assert plan.items["concetto_a"].status == PlanItemStatus.DEFERRED
     assert manager.current_concept_id == "concetto_b"
-    assert "Nessun problema" in ctx_fail2.pedagogical_directive
+    assert "Va bene, lo riprendiamo più avanti" in ctx_fail2.pedagogical_directive
 
     # 2. Answer Concetto B correctly (1st correct answer since deferral) -> Next is Concetto C
     _ctx_b, ts_b = await manager.process_student_turn(
@@ -585,12 +600,16 @@ async def test_technical_stop_does_not_pause():
     await manager.initialize_session()
 
     # Mentioning early stopping should evaluate student answer, NOT pause the session
-    ctx, ts = await manager.process_student_turn("Per prevenire l'overfitting usiamo l'early stopping.")
+    ctx, ts = await manager.process_student_turn(
+        "Per prevenire l'overfitting usiamo l'early stopping."
+    )
     assert manager.status == SessionStatus.ACTIVE
     assert ts.graph_relation_followed != "SESSION_PAUSE"
 
     # Mentioning bootstrap should NOT pause
-    ctx2, ts2 = await manager.process_student_turn("Possiamo usare il bootstrap e bagging per ensemble.")
+    ctx2, ts2 = await manager.process_student_turn(
+        "Possiamo usare il bootstrap e bagging per ensemble."
+    )
     assert manager.status == SessionStatus.ACTIVE
     assert ts2.graph_relation_followed != "SESSION_PAUSE"
 
@@ -662,6 +681,8 @@ async def test_session_repeat_and_dynamic_adaptation(tmp_path):
     # Fail ACID
     await manager.process_student_turn("Non lo so proprio")
     await manager.process_student_turn("Non saprei")
+    await manager.process_student_turn("Ancora non saprei")
+    await manager.process_student_turn("Passiamo oltre")
 
     # Pass NoSQL
     await manager.process_student_turn(
@@ -898,4 +919,3 @@ async def test_resumed_session_readiness_confirmation():
     assert "Perfetto, riprendiamo!" in ctx.pedagogical_directive
     assert "Spiegami il Concetto A." in ctx.pedagogical_directive
     assert manager.history[-1]["evaluation"] == "READINESS_CONFIRMED"
-

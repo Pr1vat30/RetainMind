@@ -42,6 +42,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
     try {
       await launchExamWithLoader(
         context,
+        directToDots: true,
         onConnect: () => exam.resumeExamAndConnect(courseId: widget.item.id),
         initialSubtitle: 'Caricamento informazioni e messaggi...',
         completedSubtitle: 'Pronto! Si comincia 😉',
@@ -65,6 +66,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
     try {
       await launchExamWithLoader(
         context,
+        directToDots: true,
         onConnect: () => exam.startNewExam(adapt: adapt, courseId: widget.item.id),
         initialSubtitle: adapt
             ? 'Preparazione ripetizione adattiva...'
@@ -945,30 +947,32 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Copertura degli Argomenti',
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.2,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Copertura degli Argomenti',
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.2,
+                    ),
                   ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Progressione prima e dopo le domande del docente',
-                  style: TextStyle(
-                    color: colors.textSecondary,
-                    fontSize: 12,
+                  const SizedBox(height: 2),
+                  Text(
+                    'Progressione prima e dopo le domande del docente',
+                    style: TextStyle(
+                      color: colors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -1197,14 +1201,16 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen>
                   ),
                   const SizedBox(height: 8),
                   Padding(
-                    padding: EdgeInsets.only(left: 8),
+                    padding: const EdgeInsets.only(left: 8),
                     child: Row(
                       children: [
                         Icon(Icons.arrow_downward_rounded, size: 16, color: colors.primary),
-                        SizedBox(width: 6),
-                        Text(
-                          'Per capire questo argomento, ripassa prima:',
-                          style: TextStyle(color: colors.textSecondary, fontSize: 11.5, fontStyle: FontStyle.italic),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Per capire questo argomento, ripassa prima:',
+                            style: TextStyle(color: colors.textSecondary, fontSize: 11.5, fontStyle: FontStyle.italic),
+                          ),
                         ),
                       ],
                     ),

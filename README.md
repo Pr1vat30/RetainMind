@@ -1,6 +1,14 @@
+<div align="center">
+  <img src="docs/assets/retain_mind_banner.png" alt="RetainMind Banner" width="100%" />
+</div>
+
+<div align="center">
+
 # RetainMind (`retain_mind`)
 
-Assistente vocale socratico per esami orali universitari, con client Flutter e backend real-time basato su Pipecat.
+**Assistente vocale socratico per esami orali universitari, con client Flutter e backend real-time basato su Pipecat.**
+
+</div>
 
 ---
 
@@ -16,7 +24,7 @@ retain_mind/
 │   ├── models/                       # Modelli dati tipizzati (Session, Plan, Report)
 │   ├── services/
 │   │   ├── api_service.dart          # Client REST per sessioni, corsi, piani e report
-│   │   └── pipecat_service.dart     # Audio WebRTC SmallWebRTC (predefinito) e WebSocket PCM
+│   │   └── pipecat_service.dart     # Audio WebRTC (SmallWebRTC)
 │   ├── providers/
 │   │   └── exam_provider.dart        # State Management centralizzato
 │   ├── screens/
@@ -31,7 +39,7 @@ retain_mind/
 │       ├── bkt_progress_bar.dart     # Progresso esame e badge FSM
 │       └── transcript_bubble.dart    # Turni di conversazione con ΔMastery
 │
-├── pubspec.yaml                      # Dipendenze Flutter (WebRTC, audio PCM fallback, REST, provider, grafici)
+├── pubspec.yaml                      # Dipendenze Flutter (WebRTC, REST, provider, grafici)
 ├── android/                          # Configurazione Android (permessi microfono e rete)
 ├── ios/                              # Configurazione iOS (NSMicrophoneUsageDescription)
 ├── macos/                            # Configurazione macOS (audio-input & network entitlements)
@@ -43,7 +51,7 @@ retain_mind/
 └── backend/                          # Backend FastAPI + Pipecat (Python)
     ├── src/
     │   ├── agent.py                  # Pipeline vocale Pipecat: Gemini Live predefinito, cascaded opzionale
-    │   ├── api.py                    # API REST, WebSocket Flutter e signaling SmallWebRTC
+    │   ├── api.py                    # API REST e signaling SmallWebRTC
     │   ├── assessment/               # Valutazione, BKT, FSM, sessioni e store per corso
     │   ├── rag/                      # Neo4j, Qdrant, Knowledge Graph
     │   ├── planning/                 # Topological Examination Planner
@@ -71,11 +79,13 @@ cd backend
 
 La modalità vocale predefinita è Gemini Live (`gemini-3.8-live`, voce `Aoede`). La pipeline cascaded STT → LLM → TTS è opzionale e si attiva con `AGENT_PIPELINE_MODE=cascaded` in `backend/.env.local`.
 
-Flutter usa SmallWebRTC per l'audio per impostazione predefinita; il signaling avviene tramite FastAPI e il media viaggia sul peer WebRTC. Il WebSocket PCM resta disponibile come fallback (`--dart-define=USE_WEBRTC_AUDIO=false`). Su Android WebRTC mantiene `MODE_IN_COMMUNICATION` per acquisizione e routing bidirezionale, mentre gli attributi dell'uscita sono impostati su `USAGE_MEDIA` e `CONTENT_TYPE_MUSIC`; AEC, noise suppression e auto gain control sono richiesti dal client.
+Flutter usa SmallWebRTC per l'audio; il signaling avviene tramite FastAPI e il media viaggia direttamente sul peer WebRTC. Su Android l'audio è configurato in modalità `MODE_NORMAL` (`AndroidAudioMode.normal`) con attributi di uscita `USAGE_MEDIA` e `CONTENT_TYPE_MUSIC`, lasciando la cancellazione d'eco e il noise filtering all'APM software di WebRTC (`androidUseHardwareAudioProcessing: false`) per garantire una riproduzione multimediale Hi-Fi evitando i filtri da chiamata vocale; AEC, noise suppression e auto gain control sono gestiti sul media stream.
 
 Per creare un piano da un argomento, l'app consente di scegliere livello e durata e mostra una revisione della dispensa e degli argomenti generati prima di avviare l'interrogazione. Il modello predefinito per estrazione e generazione del piano è `gemini-3.5-flash-lite` (`PLAN_GENERATION_MODEL`), indipendente dal modello vocale.
 
 Durante l'esame, le risposte sostanziali vengono valutate sui punti attesi e sul materiale del corso. Le richieste di pausa/ripresa non sono risposte; un chiarimento pertinente non consuma tentativi; le digressioni chiaramente estranee vengono reindirizzate senza valutazione né avanzamento del piano. Il numero minimo di tentativi per un argomento è tre; dopo i tentativi l'agente chiede se offrire un indizio o passare oltre, e attende una scelta chiara.
+
+Gli strumenti esposti al modello vocale (`FunctionSchema` per Gemini Live) comprendono `evaluate_and_advance` (valutazione e instradamento turni/digressioni), `pause_session`, `resume_session`, `repeat_examination`, `get_exam_progress`, `get_exam_history_and_comparison` e `get_session_summary`. Tutte le risposte seguono il protocollo strutturato con `status: ok` e `retryable: false`.
 
 ### 2. Avviare l'Applicazione Flutter (da Android Studio o da terminale)
 Dalla radice del progetto:

@@ -51,23 +51,23 @@ class TranscriptBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.forum_outlined, size: 14, color: colors.primaryGlow),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Turno #${turn.turnNumber}${turn.conceptId.isNotEmpty ? " • ${turn.conceptId.replaceAll('_', ' ')}" : ""}',
-                      style: TextStyle(
-                        color: colors.textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
+                Icon(Icons.forum_outlined, size: 14, color: colors.primaryGlow),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Turno #${turn.turnNumber}${turn.conceptId.isNotEmpty ? " • ${turn.conceptId.replaceAll('_', ' ')}" : ""}',
+                    style: TextStyle(
+                      color: colors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                if (turn.evaluationOutcome.isNotEmpty)
+                if (turn.evaluationOutcome.isNotEmpty) ...[
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
@@ -83,6 +83,7 @@ class TranscriptBubble extends StatelessWidget {
                       ),
                     ),
                   ),
+                ],
               ],
             ),
             const SizedBox(height: 10),
@@ -166,17 +167,21 @@ class TranscriptBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                roleLabel,
-                style: TextStyle(
-                  color: roleColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
+              Expanded(
+                child: Text(
+                  roleLabel,
+                  style: TextStyle(
+                    color: roleColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (turn.evaluationOutcome.isNotEmpty)
+              if (turn.evaluationOutcome.isNotEmpty) ...[
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
@@ -192,6 +197,7 @@ class TranscriptBubble extends StatelessWidget {
                     ),
                   ),
                 ),
+              ],
             ],
           ),
           const SizedBox(height: 6),
