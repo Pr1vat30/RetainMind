@@ -165,6 +165,116 @@ class ResponseEvaluator:
     def __init__(self, llm_evaluator_fn=None) -> None:
         self.llm_evaluator_fn = llm_evaluator_fn
 
+    def classify_student_utterance(
+        self,
+        student_response: str,
+        target_concept: ConceptNode,
+        expected_key_points: Sequence[str] | None = None,
+        ideal_answer: str = "",
+        reference_texts: Sequence[str] | None = None,
+    ) -> str | None:
+        """Route a turn as a topical clarification or a clear off-topic digression.
+
+        The lexical relevance check is deliberately a routing aid, never a grade.
+        Short and ambiguous utterances are left to the normal conversational path.
+        """
+        response = student_response.lower().strip()
+        for pattern, replacement in STT_CORRECTIONS.items():
+            response = re.sub(pattern, replacement, response)
+
+        conversational_terms = {
+            "mi",
+            "puoi",
+            "potresti",
+            "spiegare",
+            "spiegarmi",
+            "spieghi",
+            "chiarire",
+            "chiarirmi",
+            "ripetere",
+            "ripetermi",
+            "approfondire",
+            "meglio",
+            "intendi",
+            "intendo",
+            "cosa",
+            "come",
+            "perche",
+            "perché",
+            "quale",
+            "quali",
+            "chi",
+            "dove",
+            "quando",
+            "sai",
+            "vorrei",
+            "sapere",
+            "dire",
+            "dirmi",
+            "domanda",
+            "scusa",
+            "scusami",
+            "grazie",
+            "funziona",
+            "funzionare",
+            "significa",
+            "succede",
+            "importante",
+            "utile",
+            "serve",
+            "rappresenta",
+            "consiste",
+        }
+        response_terms = {
+            token
+            for token in re.findall(r"\w+", response)
+            if token not in STOP_WORDS
+            and token not in conversational_terms
+            and len(token) > 2
+        }
+        question_like = "?" in student_response or bool(
+            re.match(
+                r"\s*(che|cosa|come|perch[eé]|quale|quali|chi|dove|quando|mi puoi|mi spieghi|mi chiarisci|potresti|spiegami|cos['’]è|non capisco|non ho capito)\b",
+                response,
+            )
+        )
+        reference = " ".join(
+            [
+                target_concept.name,
+                target_concept.summary,
+                ideal_answer,
+                *(expected_key_points or []),
+                *(reference_texts or []),
+            ]
+        ).lower()
+        reference_terms = {
+            token
+            for token in re.findall(r"\w+", reference)
+            if token not in STOP_WORDS and len(token) > 2
+        }
+
+        matched_response_terms: set[str] = set()
+        for response_term in response_terms:
+            for reference_term in reference_terms:
+                if response_term == reference_term or (
+                    len(response_term) >= 4
+                    and len(reference_term) >= 4
+                    and response_term[:4] == reference_term[:4]
+                ):
+                    matched_response_terms.add(response_term)
+                    break
+
+        if question_like and matched_response_terms:
+            return "TOPICAL_CLARIFICATION"
+
+        if len(response_terms) < (1 if question_like else 4):
+            return None
+
+        relevance_ratio = len(matched_response_terms) / len(response_terms)
+        if len(matched_response_terms) < 2 and relevance_ratio < 0.4:
+            return "OFF_TOPIC"
+        return None
+
     def evaluate_response(
         self,
         student_response: str,

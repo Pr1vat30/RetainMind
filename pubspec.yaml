@@ -51,6 +51,7 @@ dependencies:
   record: ^7.1.2
   audioplayers: ^6.8.1
   flutter_pcm_sound: ^3.3.3
+  flutter_webrtc: ^1.6.2+hotfix.4
 
 
 dev_dependencies:

@@ -12,6 +12,12 @@ class AppConstants {
   static const String appTitle = 'Retain Mind';
   static const String appSubtitle = 'Assistente Vocale AI per Studio e Simulazioni Orali';
 
+  /// Set `--dart-define=USE_WEBRTC_AUDIO=false` to return to the PCM WebSocket path.
+  static const bool useWebRtcAudio = bool.fromEnvironment(
+    'USE_WEBRTC_AUDIO',
+    defaultValue: true,
+  );
+
   // Default API Host (Mobile: 192.168.1.8 Mac Wi-Fi LAN, Desktop: 127.0.0.1)
   static String get defaultBaseUrl {
     if (kIsWeb) return 'http://127.0.0.1:8000';

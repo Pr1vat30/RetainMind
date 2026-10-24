@@ -4,6 +4,15 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' hide AndroidAudioMode;
+import 'package:flutter_webrtc/flutter_webrtc.dart'
+    as rtc
+    show
+        AndroidAudioAttributesContentType,
+        AndroidAudioAttributesUsageType,
+        AndroidAudioConfiguration,
+        AndroidAudioMode;
+import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -32,16 +41,27 @@ enum SpeakingStateEnum {
 
 // ─── PipecatService ───────────────────────────────────────────────────────────
 
-/// WebSocket-based Pipecat voice service.
+/// Pipecat voice service supporting SmallWebRTC and a PCM WebSocket fallback.
 ///
-/// Streams Gemini-native PCM audio to/from the Pipecat WebSocket transport.
+/// The provider selects SmallWebRTC by default. The WebSocket path streams
+/// Gemini-native PCM audio for fallback clients or builds.
 ///
-/// Audio flow:
+/// WebSocket fallback audio flow:
 ///   Mic PCM-16 @ 16 kHz → base64 WebSocket → Gemini Live
 ///   Gemini Live PCM-16 @ 24 kHz → base64 WebSocket → native PCM playback
 class PipecatService {
   // ── Internal state ────────────────────────────────────────────────────────
   WebSocketChannel? _channel;
+  RTCPeerConnection? _peerConnection;
+  MediaStream? _localMediaStream;
+  String? _webrtcEndpoint;
+  String? _peerConnectionId;
+  final List<Map<String, dynamic>> _pendingIceCandidates = [];
+  Timer? _rtcStatsTimer;
+  int _lastInboundAudioBytes = 0;
+  int _lastOutboundAudioBytes = 0;
+  DateTime? _lastInboundAudioActivity;
+  DateTime? _lastOutboundAudioActivity;
   StreamSubscription? _wsSubscription;
   final AudioRecorder _recorder = AudioRecorder();
   final AudioPlayer _player = AudioPlayer();
@@ -161,6 +181,267 @@ class PipecatService {
       debugPrint('PipecatService connect error: $e');
       _setConnectionState(ConnectionStateEnum.failed);
       rethrow;
+    }
+  }
+
+  /// Connect to the existing Pipecat SmallWebRTC endpoint. Audio capture,
+  /// echo cancellation, jitter buffering and playback are handled by libwebrtc.
+  Future<void> connectWebRtc({
+    required String signalingUrl,
+    String? courseId,
+  }) async {
+    try {
+      await disconnect();
+      _setConnectionState(ConnectionStateEnum.connecting);
+
+      final hasPermission = await requestMicrophonePermission();
+      if (!hasPermission) {
+        throw Exception('Permesso microfono non concesso');
+      }
+
+      final initOptions = <String, dynamic>{};
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        initOptions.addAll({
+          'androidUseHardwareAudioProcessing': false,
+          'audioSampleRate': 48000,
+          // Trial: preserve the communication mode needed for WebRTC capture
+          // and routing, while classifying remote playback as media/music.
+          'androidAudioConfiguration': rtc.AndroidAudioConfiguration(
+            manageAudioFocus: true,
+            androidAudioMode: rtc.AndroidAudioMode.inCommunication,
+            androidAudioAttributesUsageType:
+                rtc.AndroidAudioAttributesUsageType.media,
+            androidAudioAttributesContentType:
+                rtc.AndroidAudioAttributesContentType.music,
+          ).toMap(),
+        });
+      }
+      await WebRTC.initialize(options: initOptions);
+
+      _webrtcEndpoint = signalingUrl;
+      _peerConnectionId = null;
+      _pendingIceCandidates.clear();
+      _lastInboundAudioBytes = 0;
+      _lastOutboundAudioBytes = 0;
+      _lastInboundAudioActivity = null;
+      _lastOutboundAudioActivity = null;
+
+      _peerConnection = await createPeerConnection({
+        'sdpSemantics': 'unified-plan',
+        'iceServers': [
+          {'urls': 'stun:stun.l.google.com:19302'},
+        ],
+      });
+      final peer = _peerConnection!;
+      peer.onIceCandidate = _onLocalIceCandidate;
+      peer.onConnectionState = _onPeerConnectionState;
+      peer.onTrack = (event) {
+        if (event.track.kind == 'audio') {
+          event.track.onUnMute = () {
+            _lastInboundAudioActivity = DateTime.now();
+          };
+        }
+      };
+
+      _localMediaStream = await navigator.mediaDevices.getUserMedia({
+        'audio': {
+          'echoCancellation': true,
+          'noiseSuppression': true,
+          'autoGainControl': true,
+          'channelCount': 1,
+        },
+        'video': false,
+      });
+      for (final track in _localMediaStream!.getAudioTracks()) {
+        await peer.addTrack(track, _localMediaStream!);
+      }
+
+      final offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      final localDescription = await peer.getLocalDescription();
+      if (localDescription?.sdp == null) {
+        throw Exception('WebRTC non ha generato l’offerta audio');
+      }
+
+      final requestBody = <String, dynamic>{
+        'sdp': localDescription!.sdp,
+        'type': localDescription.type ?? 'offer',
+      };
+      if (courseId != null && courseId.isNotEmpty) {
+        requestBody['course_id'] = courseId;
+      }
+      final response = await http
+          .post(
+            Uri.parse(signalingUrl),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode(requestBody),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'Segnalazione WebRTC rifiutata (${response.statusCode}): ${response.body}',
+        );
+      }
+
+      final answer = jsonDecode(response.body) as Map<String, dynamic>;
+      final answerSdp = answer['sdp'] as String?;
+      _peerConnectionId = answer['pc_id'] as String?;
+      if (answerSdp == null || _peerConnectionId == null) {
+        throw Exception(
+          'Il backend non ha restituito una risposta WebRTC valida',
+        );
+      }
+      await peer.setRemoteDescription(
+        RTCSessionDescription(answerSdp, answer['type'] as String? ?? 'answer'),
+      );
+
+      if (_pendingIceCandidates.isNotEmpty) {
+        final queued = List<Map<String, dynamic>>.from(_pendingIceCandidates);
+        _pendingIceCandidates.clear();
+        await _sendIceCandidates(queued);
+      }
+
+      await Helper.setSpeakerphoneOn(_isSpeakerphoneOn);
+      _rtcStatsTimer = Timer.periodic(
+        const Duration(milliseconds: 300),
+        (_) => unawaited(_updateRtcSpeakingState()),
+      );
+      await _waitForWebRtcConnection();
+    } catch (e) {
+      debugPrint('PipecatService WebRTC connect error: $e');
+      _setConnectionState(ConnectionStateEnum.failed);
+      await _closeWebRtcConnection();
+      rethrow;
+    }
+  }
+
+  void _onLocalIceCandidate(RTCIceCandidate candidate) {
+    final mapped = <String, dynamic>{
+      'candidate': candidate.candidate ?? '',
+      'sdpMid': candidate.sdpMid,
+      'sdpMLineIndex': candidate.sdpMLineIndex,
+    };
+    final pcId = _peerConnectionId;
+    if (pcId == null) {
+      _pendingIceCandidates.add(mapped);
+    } else {
+      unawaited(_sendIceCandidates([mapped]));
+    }
+  }
+
+  Future<void> _sendIceCandidates(List<Map<String, dynamic>> candidates) async {
+    final endpoint = _webrtcEndpoint;
+    final pcId = _peerConnectionId;
+    if (endpoint == null || pcId == null || candidates.isEmpty) return;
+    try {
+      final response = await http
+          .patch(
+            Uri.parse(endpoint),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({'pc_id': pcId, 'candidates': candidates}),
+          )
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode >= 400) {
+        debugPrint('PipecatService ICE patch rejected: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('PipecatService ICE patch error: $e');
+    }
+  }
+
+  void _onPeerConnectionState(RTCPeerConnectionState state) {
+    switch (state) {
+      case RTCPeerConnectionState.RTCPeerConnectionStateConnected:
+        _setConnectionState(ConnectionStateEnum.connected);
+        break;
+      case RTCPeerConnectionState.RTCPeerConnectionStateFailed:
+        _setConnectionState(ConnectionStateEnum.failed);
+        break;
+      case RTCPeerConnectionState.RTCPeerConnectionStateDisconnected:
+      case RTCPeerConnectionState.RTCPeerConnectionStateClosed:
+        _setConnectionState(ConnectionStateEnum.disconnected);
+        _setSpeakingState(SpeakingStateEnum.idle);
+        break;
+      default:
+        break;
+    }
+  }
+
+  Future<void> _waitForWebRtcConnection() async {
+    final peer = _peerConnection;
+    if (peer?.connectionState ==
+        RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+      _setConnectionState(ConnectionStateEnum.connected);
+      return;
+    }
+    final deadline = DateTime.now().add(const Duration(seconds: 20));
+    while (DateTime.now().isBefore(deadline)) {
+      if (_connectionState == ConnectionStateEnum.connected) return;
+      if (_connectionState == ConnectionStateEnum.failed) {
+        throw Exception('Connessione WebRTC non riuscita');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    throw TimeoutException('Connessione audio WebRTC scaduta');
+  }
+
+  Future<void> _updateRtcSpeakingState() async {
+    final peer = _peerConnection;
+    if (peer == null || _connectionState != ConnectionStateEnum.connected) {
+      return;
+    }
+    try {
+      final reports = await peer.getStats();
+      var inboundBytes = _lastInboundAudioBytes;
+      var outboundBytes = _lastOutboundAudioBytes;
+      double? inboundLevel;
+      double? outboundLevel;
+      for (final report in reports) {
+        final values = report.values;
+        final mediaKind = values['kind'] ?? values['mediaType'];
+        if (mediaKind != 'audio') continue;
+        final bytes = (values['bytesReceived'] ?? values['bytesSent']) as num?;
+        final level = values['audioLevel'] as num?;
+        if (report.type == 'inbound-rtp') {
+          if (bytes != null) inboundBytes = bytes.toInt();
+          inboundLevel = level?.toDouble();
+        }
+        if (report.type == 'outbound-rtp') {
+          if (bytes != null) outboundBytes = bytes.toInt();
+          outboundLevel = level?.toDouble();
+        }
+      }
+      final now = DateTime.now();
+      _lastInboundAudioActivity = inboundLevel != null
+          ? (inboundLevel > 0.02 ? now : null)
+          : inboundBytes > _lastInboundAudioBytes
+          ? now
+          : _lastInboundAudioActivity;
+      _lastOutboundAudioActivity = outboundLevel != null
+          ? (outboundLevel > 0.02 ? now : null)
+          : outboundBytes > _lastOutboundAudioBytes
+          ? now
+          : _lastOutboundAudioActivity;
+      _lastInboundAudioBytes = inboundBytes;
+      _lastOutboundAudioBytes = outboundBytes;
+
+      final inboundActive =
+          _lastInboundAudioActivity != null &&
+          now.difference(_lastInboundAudioActivity!) <
+              const Duration(milliseconds: _silenceWindowMs);
+      final outboundActive =
+          _lastOutboundAudioActivity != null &&
+          now.difference(_lastOutboundAudioActivity!) <
+              const Duration(milliseconds: _silenceWindowMs);
+      _setSpeakingState(
+        inboundActive
+            ? SpeakingStateEnum.aiSpeaking
+            : outboundActive && !_isMicMuted
+            ? SpeakingStateEnum.studentSpeaking
+            : SpeakingStateEnum.idle,
+      );
+    } catch (e) {
+      debugPrint('PipecatService WebRTC stats error: $e');
     }
   }
 
@@ -403,7 +684,11 @@ class PipecatService {
     if (!_micMutedController.isClosed) {
       _micMutedController.add(_isMicMuted);
     }
-    if (_isMicMuted) {
+    if (_peerConnection != null) {
+      for (final track in _localMediaStream?.getAudioTracks() ?? const []) {
+        track.enabled = !_isMicMuted;
+      }
+    } else if (_isMicMuted) {
       // Pause the recorder to save battery (stop sending audio)
       await _recorder.pause();
     } else {
@@ -413,7 +698,11 @@ class PipecatService {
 
   Future<void> toggleSpeakerphone() async {
     _isSpeakerphoneOn = !_isSpeakerphoneOn;
-    await _configureAudioRoute();
+    if (_peerConnection != null) {
+      await Helper.setSpeakerphoneOn(_isSpeakerphoneOn);
+    } else {
+      await _configureAudioRoute();
+    }
     debugPrint('PipecatService speakerphone: $_isSpeakerphoneOn');
   }
 
@@ -472,6 +761,7 @@ class PipecatService {
     _sentMicChunks = 0;
     _receivedMediaChunks = 0;
     _playedAudioChunks = 0;
+    await _closeWebRtcConnection();
 
     // Stop microphone
     await _micSubscription?.cancel();
@@ -505,6 +795,43 @@ class PipecatService {
 
     _setConnectionState(ConnectionStateEnum.disconnected);
     _setSpeakingState(SpeakingStateEnum.idle);
+  }
+
+  Future<void> _closeWebRtcConnection() async {
+    _rtcStatsTimer?.cancel();
+    _rtcStatsTimer = null;
+    _peerConnectionId = null;
+    _webrtcEndpoint = null;
+    _pendingIceCandidates.clear();
+    final stream = _localMediaStream;
+    _localMediaStream = null;
+    if (stream != null) {
+      for (final track in stream.getTracks()) {
+        try {
+          await track.stop();
+        } catch (_) {}
+      }
+      try {
+        await stream.dispose();
+      } catch (_) {}
+    }
+    final peer = _peerConnection;
+    _peerConnection = null;
+    if (peer != null) {
+      peer.onConnectionState = null;
+      peer.onIceCandidate = null;
+      peer.onTrack = null;
+      try {
+        await peer.close();
+      } catch (_) {}
+      try {
+        await peer.dispose();
+      } catch (_) {}
+    }
+    _lastInboundAudioBytes = 0;
+    _lastOutboundAudioBytes = 0;
+    _lastInboundAudioActivity = null;
+    _lastOutboundAudioActivity = null;
   }
 
   // ── Wait for the first AI audio frame ──────────────────────────────────────

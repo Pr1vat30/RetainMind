@@ -28,9 +28,9 @@ RetainMind addresses this pedagogical gap by functioning as an **Autonomous Socr
 * **Document Ingestion & Extraction:** Automated text extraction and chunking for supported PDF, Markdown, and TXT materials. OCR support for scanned PDFs is not documented as an active capability.
 * **Ontological Graph & Vector Indexing:** Extraction of `ConceptNode` entities, directed relationships (`REQUIRES`, `CAUSES`, `CONTRASTS_WITH`, `EXPANDS`), and text chunks stored in dual databases (**Neo4j** for graph topology and **Qdrant** for dense vector embeddings), with in-memory stores used by the current default setup.
 * **Topological Examination Planning:** Automated derivation of structured `ExaminationPlan` objects with pre-calculated question blueprints (main Socratic inquiry, narrowing probes, scaffolding hints, collision checks) ordered by topological prerequisite dependencies.
-* **Pipecat Voice Agent:** Real-time oral examination served by FastAPI over Flutter PCM WebSocket or optional SmallWebRTC signaling. Gemini Live is the default voice mode (`gemini-3.8-live`, voice `Aoede`); cascaded STT → LLM → TTS is optional.
-* **Cascaded Voice Pipeline (Default):** Modular streaming Speech-to-Text, LLM reasoning, and Text-to-Speech, configured through `AGENT_STT_MODEL`, `AGENT_LLM_MODEL`, and `AGENT_TTS_MODEL` with provider credentials.
-* **Plan-Based Response Evaluation:** Transcript answers are compared with expected key points in the plan; the evaluator uses lexical/stem heuristics and response categories. It does not claim to provide validated acoustic or semantic biomarker measurements.
+* **Pipecat Voice Agent:** Real-time oral examination served by FastAPI. Flutter uses SmallWebRTC by default and can fall back to PCM WebSocket. Gemini Live is the default voice mode (`gemini-3.8-live`, voice `Aoede`); cascaded STT → LLM → TTS is optional.
+* **Optional Cascaded Voice Pipeline:** Modular streaming Speech-to-Text, LLM reasoning, and Text-to-Speech, enabled with `AGENT_PIPELINE_MODE=cascaded`; the effective providers depend on the selected implementation and available credentials.
+* **Plan-Based Response Evaluation & Intent Routing:** Substantive transcript answers are compared with expected key points using lexical/stem heuristics. Pause/resume controls, relevant clarification questions, and clear off-topic digressions are routed separately and do not consume answer attempts or update BKT.
 * **Bayesian Knowledge Tracing (BKT) & Pedagogical FSM:** Real-time tracking of latent concept mastery probabilities, driving a pedagogical Finite State Machine with dynamic states (`EXPLORATION`, `CAUSAL_NARROWING`, `SCAFFOLDING`, `CONCEPTUAL_COLLISION`, `PREREQUISITE_FALLBACK`).
 * **Deferred Retry Queue:** Concepts can be revisited during the examination; ordering and retry behavior follow the current examination plan and assessment state.
 * **Session Lifecycle, Longitudinal Analytics & Persistence:** Mid-exam pausing, seamless resumption, multi-iteration retakes with dynamic pedagogical recalibration, $\Delta\text{Mastery}$ delta tracking, prerequisite Root Cause Analysis, complete turn-by-turn conversation logging, and CLI management.
@@ -102,7 +102,7 @@ RetainMind addresses this pedagogical gap by functioning as an **Autonomous Socr
 
 This RAD is organized into the following major chapters:
 * **Section 2 (Current System):** Documents the exact architecture, components, data flows, storage layers, audio pipelines, and configuration options implemented in the codebase today.
-* **Section 3 (Proposed System):** Details the target system evolution, structured Functional Requirements (FR-001 through FR-015), Non-Functional Requirements (NFRs), System Scenarios, Use Case Models, Object Models, Dynamic Models, and UI Wireframes.
+* **Section 3 (Proposed System):** Details the target system evolution, structured Functional Requirements (FR-001 through FR-016), Non-Functional Requirements (NFRs), System Scenarios, Use Case Models, Object Models, Dynamic Models, and UI Wireframes.
 * **Section 4 (Glossary):** Comprehensive technical lexicon.
 * **Section 5 (Architecture Evolution & Trade-offs):** Retrospective analysis of architectural shifts, abandoned prototypes, and technical justifications.
 * **Section 6 (Configuration Matrix):** Detailed breakdown of all environment and runtime variables.
@@ -115,18 +115,19 @@ This RAD is organized into the following major chapters:
 
 The Flutter app offers topic-based plan generation with configurable study level and duration, then lets the student review the generated handout and concepts before beginning the oral exam. The default plan-generation model is `gemini-3.5-flash-lite`.
 
-The current system uses a Flutter client and a Python FastAPI backend managed with `uv`. FastAPI serves REST endpoints and Pipecat voice sessions. Flutter streams mono PCM over WebSocket; SmallWebRTC signaling is also available. The default voice pipeline is Gemini Live; cascaded STT → LLM → TTS is selectable through configuration.
+The current system uses a Flutter client and a Python FastAPI backend managed with `uv`. FastAPI serves REST endpoints and Pipecat voice sessions. Flutter uses SmallWebRTC for bidirectional audio by default; PCM WebSocket is a selectable fallback. The default voice pipeline is Gemini Live; cascaded STT → LLM → TTS is selectable through configuration.
 
 ```text
 Flutter client (lib/)
   ├─ REST: courses, plans, session status/transcript/control, reports
-  └─ WebSocket PCM (mono, 16 kHz input) ──┐
+  └─ SmallWebRTC audio (default) ─────────┐
+      WebSocket PCM fallback (16 kHz) ─────┤
                                            ▼
 FastAPI server (backend/src/api.py, port 8000)
   ├─ /ws, /ws/{course_id}, /ws/test/{course_id}
   ├─ SmallWebRTC signaling endpoints (/api/offer, /api/session/webrtc)
   └─ Pipecat pipeline (backend/src/agent.py)
-       ├─ default: Gemini Live (`gemini-3.8-live`, 24 kHz output)
+       ├─ default: Gemini Live (`gemini-3.8-live`, voice `Aoede`)
        └─ optional: cascaded STT → LLM → TTS
              │
              ├─ SessionAssessmentManager / plan-based evaluation / BKT / FSM
@@ -160,6 +161,8 @@ FastAPI server (backend/src/api.py, port 8000)
 
 ### 2.2.4 Real-Time Assessment & Pedagogical FSM (`src/assessment/`)
 * **`ResponseEvaluator`:** Compares the transcript with expected key points for the active planned question and applies lexical/stem-based heuristics to classify the response. Treat these labels as heuristic pedagogical signals, not a validated semantic or acoustic measurement.
+* **Turn intent routing:** Before scoring, the evaluator distinguishes relevant clarification questions from clearly unrelated questions/digressions using lexical overlap with the active concept, question, rubric, and retrieved passages. Clarifications are answered briefly from verified context; off-topic turns receive a gentle redirect. Neither path consumes an attempt, changes mastery, or advances the plan. Routed examples are recorded in session events for review. This is a conservative heuristic and may require calibration against actual transcripts.
+* **Examiner guardrails:** `src/prompts/examiner.py` contains the shared examiner policy; `build_examiner_system_instructions` adds course scope and the session greeting, while `build_examiner_turn_prompt` supplies turn-specific evidence and direction. Explicit pause commands are not answers; during pause, speech is ignored until an explicit resume command. Uncertainty does not itself skip a concept. Planned questions allow at least three attempts before offering a clear choice between help and moving on.
 * **`BayesianKnowledgeTracing` (BKT):** Updates latent mastery $P(L_t)$ per concept node using prior $P(L_0)$, learning transit $P(T)$, slip probability $P(S)$, and guess probability $P(G)$, writing dynamic mastery deltas back to the knowledge graph.
 * **`OralExaminerFSM`:** Drives pedagogical state transitions:
   * `EXPLORATION`: Standard inquiry on scheduled concept.
@@ -173,8 +176,9 @@ FastAPI server (backend/src/api.py, port 8000)
 
 ### 2.2.5 Pipecat Voice Agent & Audio Transport (`src/agent.py`)
 * **Pipecat pipeline:** Built and started by FastAPI for each voice session; the session uses the active course plan and assessment context.
-* **Transports:** Flutter WebSocket PCM is the primary app path. SmallWebRTC signaling endpoints are available for WebRTC clients.
-* **Pipeline modes:** `gemini_live` (default) selects Gemini Live; `cascaded` optionally composes STT, LLM, and TTS services. Flutter sends mono PCM S16LE at 16 kHz; Gemini Live output is mono PCM at 24 kHz. Interruption clears queued playback.
+* **Transports:** Flutter uses SmallWebRTC peer audio by default through `/api/offer` (also `/api/session/webrtc`) and trickle-ICE patches on `/api/offer`. The bidirectional PCM WebSocket endpoints remain available as fallback.
+* **Pipeline modes:** `gemini_live` (default) selects Gemini Live; `cascaded` optionally composes STT, LLM, and TTS services. WebSocket fallback input is mono PCM S16LE at 16 kHz and Gemini Live output is mono PCM at 24 kHz. WebRTC negotiates media through libwebrtc and uses the transport's codec/sample handling. Interruption clears queued playback.
+* **Android audio route:** Flutter WebRTC requests mono capture with echo cancellation, noise suppression, and auto gain control. It disables hardware audio processing and requests a 48 kHz device rate. The current Android configuration keeps `MODE_IN_COMMUNICATION` for full-duplex microphone capture/routing while setting output `AudioAttributes` to `USAGE_MEDIA` / `CONTENT_TYPE_MUSIC`; it does not switch the microphone into a playback-only mode.
 
 ### 2.2.6 Terminal CLI Console (`src/session_cli.py`)
 * Dedicated command-line interface supporting commands: `status`, `pause`, `resume`, `repeat`, `history`, `compare`, `report`, and `transcript` (with full markdown export capability).
@@ -208,7 +212,7 @@ sequenceDiagram
     participant Graph as 🕸️ Neo4j / InMemoryGraph
     participant Disk as 💾 session_state.json
 
-    Student->>Agent: PCM audio over WebSocket
+    Student->>Agent: WebRTC audio (default) / PCM WebSocket fallback
     Agent->>Gemini: Audio frames / text frames
     Agent->>Manager: process_student_turn(transcript, pause_duration)
     Manager->>Eval: evaluate_response(transcript, target_concept, GroundTruth)
@@ -230,13 +234,13 @@ sequenceDiagram
 
 The RetainMind project originated from the concept outlined in `RetainMind_Technical_RAG_Specification.md`, which proposed a custom Rust FFI mobile audio engine, a Rust Tokio WebSocket gateway, and a mobile-driven lock-screen micro-interrogation model.
 
-The implemented architecture is a Flutter client with a unified FastAPI/Pipecat backend. Flutter currently uses WebSocket PCM; SmallWebRTC signaling is an additional transport option. The default speech path is Gemini Live; cascaded STT → LLM → TTS is an optional mode.
+The implemented architecture is a Flutter client with a unified FastAPI/Pipecat backend. Flutter uses SmallWebRTC media by default; WebSocket PCM is the fallback. The default speech path is Gemini Live; cascaded STT → LLM → TTS is optional.
 
 ### Evolution Summary Table:
 
 | Subsystem | Original Specification (`Technical_RAG_Specification.md`) | Current & Proposed System (`RetainMind_RAD.md`) | Rationale for Evolution |
 | :--- | :--- | :--- | :--- |
-| **Voice Transport & Gateway** | Custom Rust Tokio WebSocket server parsing raw Opus & Protobuf. | FastAPI-managed Pipecat WebSocket PCM; optional SmallWebRTC signaling. | A unified API process serves Flutter REST and voice sessions. |
+| **Voice Transport & Gateway** | Custom Rust Tokio WebSocket server parsing raw Opus & Protobuf. | FastAPI-managed Pipecat SmallWebRTC media for Flutter; PCM WebSocket fallback. | Pipecat handles WebRTC media while retaining a simpler PCM path for fallback and diagnostics. |
 | **Speech Pipeline** | Dual-vendor hypothesis (OpenAI Realtime vs. Gemini Live) + unproven cascade. | Gemini Live is the default; cascaded STT → LLM → TTS is optional. | The pipeline mode is configurable; latency and audio quality must be measured per device and provider. |
 | **Assessment & Memory Retention** | Modified classical spaced repetition (v-SM2 / FSRS-4.5) formula. | **Bayesian Knowledge Tracing (BKT)** + **Ontological Pedagogical FSM** + **Cyclic Deferred Queue**. | BKT models latent mastery probabilities per concept mathematically, enabling real-time multi-hop root-cause diagnosis of prerequisite gaps rather than static flashcard scheduling. |
 | **Session Control & Interfaces** | Limited to mobile app interface. | Flutter app, FastAPI REST endpoints, and `SessionService`. | Connects course, plan, session, transcript, and report workflows to the mobile client. |
@@ -273,7 +277,7 @@ The implemented architecture is a Flutter client with a unified FastAPI/Pipecat 
                                ┌─────────────────────────┐
                                │  LIFECYCLE & ANALYTICS  │
                                │  FR-012, FR-013, FR-014,│
-                               │  FR-015                 │
+                               │  FR-015, FR-016         │
                                └─────────────────────────┘
 ```
 
@@ -322,7 +326,7 @@ For topic-based plan generation, the Flutter flow offers `base`, `intermedio`, o
 ### 3.2.3 Real-Time Voice & Dialogue Requirements
 
 * **FR-006: Bidirectional Speech-to-Speech Interrogation**
-  * *Description:* The system shall conduct oral examination sessions through Pipecat over Flutter WebSocket PCM. SmallWebRTC signaling is also available. Plans generated from a topic accept a level and duration, and the app presents generated material for review before starting.
+  * *Description:* The system shall conduct oral examination sessions through Pipecat over Flutter SmallWebRTC by default, with WebSocket PCM as a fallback. Plans generated from a topic accept a level and duration, and the app presents generated material for review before starting.
   * *Preconditions:* The selected Pipecat transport is connected and provider credentials for the configured pipeline are available.
   * *Main Behavior:* Streams microphone audio to the selected pipeline and returns examiner audio to the client.
   * *Expected Result:* Spoken dialogue over the selected transport; latency depends on pipeline, provider, and network.
@@ -341,6 +345,11 @@ For topic-based plan generation, the Flutter flow offers `base`, `intermedio`, o
   * *Main Behavior:* The pipeline handles interruption events and Flutter clears queued playback using the `clear` audio event; exact turn timing depends on the configured pipeline.
   * *Expected Result:* Natural human-like conversational turn-taking.
   * *Dependencies:* Pipecat transport and client playback queue.
+
+* **FR-016: Control, Clarification & Off-Topic Routing**
+  * *Description:* The system shall distinguish an exam answer from pause/resume commands, relevant clarification questions, and clearly unrelated digressions.
+  * *Main Behavior:* Pause and resume are explicit controls. A topical clarification is answered briefly from verified course context without score or attempt updates. An off-topic utterance is redirected to the active question without advancing the plan. A vague "non so" does not itself skip an item; after at least three attempts, the examiner asks whether to offer help or move on.
+  * *Diagnostics:* Routed turns are recorded as session events with their intent and transcript, and are excluded from answer history and mastery updates.
 
 ### 3.2.4 Assessment & Knowledge Tracing Requirements
 
@@ -424,8 +433,8 @@ For topic-based plan generation, the Flutter flow offers `base`, `intermedio`, o
 * **NFR-I-02 (Pipecat Integration):** Voice processing shall use the Pipecat pipeline created by the FastAPI application; `src/api.py` is the server entrypoint and `src/agent.py` builds the pipeline.
 
 ### 3.3.6 Interface Specifications
-* **NFR-IF-01 (Audio Interface):** Flutter WebSocket audio uses mono PCM S16LE at 16 kHz input; Gemini Live returns mono PCM at 24 kHz. SmallWebRTC is an optional signaling transport.
-* **NFR-IF-02 (Service Interface):** FastAPI REST endpoints and WebSocket audio events provide the Flutter-facing service interfaces.
+* **NFR-IF-01 (Audio Interface):** Flutter uses SmallWebRTC media by default; WebSocket fallback uses mono PCM S16LE at 16 kHz input and 24 kHz Gemini Live output. Android WebRTC requests echo cancellation, noise suppression, auto gain control, and 48 kHz device audio; output attributes use media/music while capture stays in `MODE_IN_COMMUNICATION`.
+* **NFR-IF-02 (Service Interface):** FastAPI REST endpoints, SmallWebRTC offer/ICE signaling, and WebSocket PCM fallback provide the Flutter-facing service interfaces.
 
 ### 3.3.7 Packaging & Deployment
 * **NFR-PKG-01 (Containerized Deployment):** The backend can be started locally with `./start_api_server.sh`, which runs the unified FastAPI/Pipecat application.
@@ -705,8 +714,8 @@ stateDiagram-v2
 ```text
 Flutter client (`lib/`)
   ├─ ApiService: REST course, plan, session, transcript, and report operations
-  └─ PipecatService: microphone/playback PCM over WebSocket
-          │ REST + WebSocket PCM
+  └─ PipecatService: SmallWebRTC microphone/playback by default
+          │ REST + SmallWebRTC media (PCM WebSocket fallback)
           ▼
 FastAPI (`backend/src/api.py`, port 8000)
   ├─ `/api/...` REST endpoints
@@ -727,8 +736,8 @@ FastAPI (`backend/src/api.py`, port 8000)
 * **Ground Truth Passage:** Verbatim excerpt extracted from textbook literature during ingestion, used to calibrate factual correctness.
 * **Hesitation Biomarker:** Combined metrics of non-lexical vocal pauses and latency intervals indicating low cognitive certainty.
 * **Pipecat:** Python framework used to compose the real-time voice pipeline.
-* **SmallWebRTC:** Optional WebRTC signaling and media transport integrated with the FastAPI service.
-* **WebSocket PCM:** Flutter audio protocol carrying mono PCM S16LE frames.
+* **SmallWebRTC:** Default Flutter WebRTC signaling and media transport integrated with the FastAPI service.
+* **WebSocket PCM:** Fallback Flutter audio protocol carrying mono PCM S16LE frames.
 * **Pedagogical Directive:** Real-time prompt instructions dynamically synthesized to guide the AI examiner's exact conversational behavior on the upcoming turn.
 * **Root Cause Analysis (RCA):** Diagnostic algorithm that traces failures on complex concepts down the prerequisite DAG to identify unmastered foundational topics.
 * **Socratic Method:** Pedagogical inquiry style that guides students through targeted questions and counter-examples rather than direct lecturing.
@@ -742,7 +751,7 @@ During development, multiple architectural approaches were prototyped, tested, a
 ### 1. Custom Rust Tokio WebSocket Proxy vs. FastAPI and Pipecat
 * *Initial Concept:* Build a custom Rust WebSocket gateway (`flutter_rust_bridge` + Tokio) to route raw Opus audio frames and Protobuf messages.
 * *Encountered Problems:* Significant complexity in managing custom jitter buffers, cross-platform audio device drivers (Oboe/CoreAudio), edge ICE/TURN NAT traversal, and network degradation.
-* *Adopted Solution:* The voice service is integrated into the FastAPI application using **Pipecat**. Flutter uses the WebSocket PCM transport; SmallWebRTC signaling is also exposed. Audio quality and latency remain deployment and device dependent.
+* *Adopted Solution:* The voice service is integrated into the FastAPI application using **Pipecat**. Flutter uses SmallWebRTC media by default and PCM WebSocket as a fallback. Audio quality and latency remain deployment and device dependent.
 
 ### 2. Dual S2S Engine Experimentation (OpenAI Realtime vs. Google Gemini Live)
 * *Initial Concept:* Maintain agnostic dual-streaming adapters for both OpenAI Realtime API and Gemini Live API.
@@ -758,16 +767,17 @@ During development, multiple architectural approaches were prototyped, tested, a
 
 # 6. Configuration Analysis & Matrix
 
-The system behavior is governed by configuration loaded from `.env.local` (when present) or `.env` via `VoiceAgentConfig` (`src/config.py`).
+Backend behavior is governed by configuration loaded from `.env.local` (when present) or `.env` via `VoiceAgentConfig` (`src/config.py`). Flutter compile-time options are identified separately in the matrix.
 
 | Variable Name | Type / Allowed Values | Default Value | Operational Purpose & Architectural Impact |
 | :--- | :--- | :--- | :--- |
 | `AGENT_PIPELINE_MODE` | `gemini_live` \| `cascaded` | `gemini_live` | Selects the voice pipeline. Gemini Live is the default; `cascaded` runs STT → LLM → TTS when explicitly selected. |
 | `GEMINI_LIVE_MODEL` | String | `gemini-3.8-live` | Model selected when `AGENT_PIPELINE_MODE=gemini_live`. |
 | `PLAN_GENERATION_MODEL` | String | `gemini-3.5-flash-lite` | Default model for topic/material extraction and plan generation. |
-| `WEBRTC_MODE` | String | `smallwebrtc` | Selects WebRTC signaling mode where used; Flutter audio currently uses WebSocket PCM. |
-| `WS_SAMPLE_RATE` | Integer | `16000` | Flutter microphone input sample rate. |
-| `AUDIO_SAMPLE_RATE` | Integer | `24000` | Configured output sample rate for the audio pipeline. |
+| `USE_WEBRTC_AUDIO` | Flutter `--dart-define` Boolean | `true` | Uses SmallWebRTC by default; set to `false` at Flutter build/run time to use WebSocket PCM. |
+| `WEBRTC_MODE` | String | `smallwebrtc` | Backend-reported WebRTC transport mode; signaling is implemented by Pipecat SmallWebRTC. |
+| `WS_SAMPLE_RATE` | Integer | `16000` | Input sample rate for WebSocket PCM fallback. |
+| `AUDIO_SAMPLE_RATE` | Integer | `24000` | Configured output sample rate for the WebSocket PCM pipeline. |
 | `GEMINI_VOICE` | String | `Aoede` | Voice selection for Gemini Live mode. |
 | `GOOGLE_API_KEY` | String (Secret) | `""` | Authentication key for Google generation services and Gemini Live. |
 | `EMBEDDING_PROVIDER` | String | `mock` | Embedding implementation selected by the RAG configuration. |
@@ -782,8 +792,10 @@ The system behavior is governed by configuration loaded from `.env.local` (when 
 | `BKT_MISTAKE_DECAY` | Float ($0.0 - 1.0$) | `0.60` | Mastery penalty multiplier applied when critical mistakes or misconceptions occur. |
 | `VERBOSE_REQUESTS` | Boolean (`true` \| `false`) | `true` | Enables rich structured terminal banner logging for evaluations, BKT deltas, and FSM transitions. |
 
+`USE_WEBRTC_AUDIO` is a Flutter compile-time setting passed with `--dart-define`; it is not a backend environment variable in `VoiceAgentConfig`.
+
 ---
 
 # 7. Final Verification & Validation Summary
 
-This RAD describes the implemented architecture at the time of its last code review. It is not a record of a fresh test run; verify requirements against the current source and run the relevant backend checks before release. The Flutter voice path is WebSocket PCM, the server is unified under FastAPI, and plan generation defaults to `gemini-3.5-flash-lite`.
+This RAD documents the current implementation but is not a record of a fresh device or provider integration run. Verify requirements against the current source and run relevant checks before release. Flutter uses SmallWebRTC voice by default with WebSocket PCM fallback; FastAPI serves the Pipecat pipeline; plan generation defaults to `gemini-3.5-flash-lite`. Android's active audio configuration uses media/music output attributes while keeping WebRTC capture/routing in communication mode.

@@ -364,6 +364,23 @@ class ExamProvider with ChangeNotifier {
     ).toString();
   }
 
+  String _resolvePipecatSignalingUrl() {
+    // Use the reachable API origin selected by health discovery, not the
+    // localhost server_url echoed by the backend for requests from a phone.
+    final apiUri = Uri.parse(_apiService.baseUrl);
+    final host =
+        (apiUri.host == 'localhost' || apiUri.host == '127.0.0.1') &&
+            defaultTargetPlatform == TargetPlatform.android
+        ? '10.0.2.2'
+        : apiUri.host;
+    return Uri(
+      scheme: apiUri.scheme == 'https' ? 'https' : 'http',
+      host: host,
+      port: apiUri.hasPort ? apiUri.port : null,
+      path: '/api/offer',
+    ).toString();
+  }
+
   /// Proactively prewarms the Pipecat session token in background.
   Future<void> prewarmExamSession({String? courseId}) async {
     final targetCourse = (courseId != null && courseId.isNotEmpty)
@@ -429,11 +446,18 @@ class ExamProvider with ChangeNotifier {
         );
       }
 
-      final wsUrl = _resolvePipecatWsUrl(tokenRes);
-      debugPrint('🔌 Connecting to Pipecat WS: $wsUrl');
-
-      // 2. Connect to Pipecat via WebSocket
-      await _pipecatService.connect(wsUrl: wsUrl);
+      if (AppConstants.useWebRtcAudio) {
+        final signalingUrl = _resolvePipecatSignalingUrl();
+        debugPrint('🔌 Connecting to Pipecat WebRTC: $signalingUrl');
+        await _pipecatService.connectWebRtc(
+          signalingUrl: signalingUrl,
+          courseId: effectiveCourseId,
+        );
+      } else {
+        final wsUrl = _resolvePipecatWsUrl(tokenRes);
+        debugPrint('🔌 Connecting to Pipecat WebSocket: $wsUrl');
+        await _pipecatService.connect(wsUrl: wsUrl);
+      }
 
       // 3. Start Periodic Telemetry & Transcript Polling
       _startPolling();
@@ -521,10 +545,20 @@ class ExamProvider with ChangeNotifier {
         participantName: 'Tester',
       );
 
-      final wsUrl = _resolvePipecatWsUrl(tokenRes);
-      debugPrint('🔌 Direct test connecting to Pipecat WS: $wsUrl');
-
-      await _pipecatService.connect(wsUrl: wsUrl);
+      if (AppConstants.useWebRtcAudio) {
+        final signalingUrl = _resolvePipecatSignalingUrl();
+        debugPrint(
+          '🔌 Direct test connecting to Pipecat WebRTC: $signalingUrl',
+        );
+        await _pipecatService.connectWebRtc(
+          signalingUrl: signalingUrl,
+          courseId: 'direct_test',
+        );
+      } else {
+        final wsUrl = _resolvePipecatWsUrl(tokenRes);
+        debugPrint('🔌 Direct test connecting to Pipecat WebSocket: $wsUrl');
+        await _pipecatService.connect(wsUrl: wsUrl);
+      }
 
       if (waitForAiInteraction) {
         await _pipecatService.waitForFirstAiInteraction();

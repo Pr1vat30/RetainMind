@@ -165,9 +165,13 @@ SKIP_CONFIRMATION_NO: frozenset[str] = frozenset(
 EXPLICIT_PAUSE_PATTERNS: tuple[str, ...] = (
     r"\b(facciamo\s+una\s+)?pausa\b",
     r"\bfermiamoci(\s+qui)?\b",
-    r"\bvoglio\s+(fermarmi|fare\s+una\s+pausa)\b",
+    r"\b(voglio|vorrei)\s+(fermarmi|fare\s+una\s+pausa)\b",
+    r"\b(aspetta|attendi|fermati|smetti)(\s+(un\s+)?(attimo|momento|secondo))?\b",
+    r"\b(un\s+(attimo|momento|secondo|minuto)|dammi\s+un\s+(attimo|momento|secondo|minuto))\b",
+    r"\b(fermiamoci|ci\s+fermiamo)\s+(un\s+)?(attimo|momento|secondo|qui)\b",
     r"\bmettiamo\s+in\s+pausa\b",
     r"\b(possiamo\s+fare\s+una\s+)?pausa\b",
+    r"\b(interrompiamo|sospendiamo)\s+(un\s+)?(attimo|momento|qui)\b",
     r"\bsalva\s+e\s+(riprendiamo|continuiamo)\b",
     r"\briprendiamo\s+dopo\b",
     r"\bsospendiamo(\s+l['']esame)?\b",
@@ -180,6 +184,17 @@ EXPLICIT_PAUSE_COMMANDS: frozenset[str] = frozenset(
         "pausa",
         "stop",
         "fermati",
+        "aspetta",
+        "attendi",
+        "un attimo",
+        "un momento",
+        "un secondo",
+        "un minuto",
+        "dammi un secondo",
+        "dammi un attimo",
+        "aspetta un attimo",
+        "attendi un attimo",
+        "fermati un attimo",
         "facciamo una pausa",
         "fermiamoci qui",
         "ci fermiamo",
@@ -231,8 +246,10 @@ def is_explicit_pause_request(text: str) -> bool:
     if clean in EXPLICIT_PAUSE_COMMANDS:
         return True
 
-    # If the student spoke a substantial answer (> 6 words), don't trigger pause
-    if len(words) <= 6:
+    # Short pause commands are control input, not an answer to the exam question.
+    # The technical-term guard above avoids interpreting phrases like "early stopping"
+    # as a request to interrupt the session.
+    if len(words) <= 8:
         for pat in EXPLICIT_PAUSE_PATTERNS:
             if re.search(pat, clean):
                 return True
@@ -244,16 +261,39 @@ def is_explicit_pause_request(text: str) -> bool:
 RESUME_REQUEST_PHRASES: frozenset[str] = frozenset(
     {
         "riprendiamo",
+        "riprendiamo l'esame",
         "continuiamo",
         "sono tornato",
         "ripartiamo",
         "riprendi",
+        "continua",
         "continua da dove eravamo",
+        "andiamo avanti",
         "proseguiamo",
+        "procediamo",
         "possiamo riprendere",
+        "possiamo continuare",
         "sono pronto a riprendere",
+        "sono pronta a riprendere",
+        "sono pronto",
+        "sono pronta",
+        "ok riprendiamo",
+        "okay riprendiamo",
+        "sì, riprendiamo",
+        "si riprendiamo",
     }
 )
+
+
+def is_explicit_resume_request(text: str) -> bool:
+    """Only resume on a clear request, not on a casual 'sì' or 'ok'."""
+    clean = re.sub(r"[^\w\sàèéìòù']", " ", text.lower())
+    clean = " ".join(clean.split())
+    return any(
+        re.search(rf"\b{re.escape(phrase)}\b", clean)
+        for phrase in RESUME_REQUEST_PHRASES
+    )
+
 
 # Phrases signaling student's request to repeat / retake the oral examination
 REPEAT_REQUEST_PHRASES: frozenset[str] = frozenset(
@@ -488,24 +528,27 @@ class SessionAssessmentManager:
                 logger.info(
                     "Explicit pause request detected from student: '%s'", clean_text
                 )
+                if self.status == SessionStatus.PAUSED:
+                    return await self._paused_wait_response()
                 return await self.pause_session()
+
+            # While paused, treat speech as session control only. Do not evaluate,
+            # advance the plan, or offer hints unless the student clearly resumes.
+            if self.status == SessionStatus.PAUSED:
+                is_repeat_request = any(
+                    phrase in msg_lower for phrase in REPEAT_REQUEST_PHRASES
+                )
+                if is_repeat_request:
+                    return await self.restart_examination(adapt_from_previous=True)
+                if is_explicit_resume_request(clean_text):
+                    return await self.resume_session()
+                return await self._paused_wait_response()
 
             is_repeat_request = any(
                 phrase in msg_lower for phrase in REPEAT_REQUEST_PHRASES
             )
             if is_repeat_request:
                 return await self.restart_examination(adapt_from_previous=True)
-
-            if self.status == SessionStatus.PAUSED:
-                is_resume_request = any(
-                    phrase in msg_lower for phrase in RESUME_REQUEST_PHRASES
-                ) or bool(
-                    set(re.findall(r"\w+", msg_lower)).intersection(
-                        AFFIRMATIVE_READINESS_WORDS
-                    )
-                )
-                if is_resume_request:
-                    return await self.resume_session()
 
             if not self.current_concept_id:
                 await self.initialize_session()
@@ -562,6 +605,95 @@ class SessionAssessmentManager:
                     all_concepts,
                     gt_chunks,
                 )
+
+            active_plan_item = (
+                self.examination_plan.items.get(concept_id)
+                if self.examination_plan
+                else None
+            )
+            active_question = (
+                active_plan_item.planned_question if active_plan_item else None
+            )
+            is_skip_request = any(
+                phrase in msg_lower for phrase in SKIP_REQUEST_PHRASES
+            )
+
+            # Route clarifications and clear digressions before score/plan updates.
+            question_anchor = [active_question.main_question] if active_question else []
+            turn_intent = None
+            if self.pending_skip_confirmation != concept_id and not is_skip_request:
+                turn_intent = self.evaluator.classify_student_utterance(
+                    student_response=clean_text,
+                    target_concept=current_concept,
+                    expected_key_points=(
+                        [*(active_question.expected_key_points or []), *question_anchor]
+                        if active_question
+                        else question_anchor
+                    ),
+                    ideal_answer=(
+                        active_question.ideal_answer if active_question else ""
+                    ),
+                    reference_texts=[chunk.text for chunk in gt_chunks],
+                )
+
+            if turn_intent in {"TOPICAL_CLARIFICATION", "OFF_TOPIC"}:
+                question_to_repeat = (
+                    active_question.main_question
+                    if active_question
+                    else f"Mi parli di {current_concept.name}."
+                )
+                if turn_intent == "TOPICAL_CLARIFICATION":
+                    spoken_directive = (
+                        "Lo studente chiede un chiarimento pertinente. Rispondi in una o "
+                        "due frasi usando solo il contesto verificato, senza valutare né "
+                        f"consumare tentativi; poi riprendi così: {question_to_repeat}"
+                    )
+                else:
+                    spoken_directive = (
+                        "Capisco la curiosità; per non perdere il filo restiamo su "
+                        f"{current_concept.name}. {question_to_repeat}"
+                    )
+                off_topic_context = ExaminerContext(
+                    current_concept=current_concept,
+                    pedagogical_state=self.current_pedagogical_state,
+                    ground_truth_chunks=gt_chunks,
+                    prerequisites=prereqs,
+                    causal_targets=causal_targets,
+                    contrasting_concepts=contrasting,
+                    multi_hop_concepts=multi_hop,
+                    all_graph_concepts=all_concepts,
+                    pedagogical_directive=spoken_directive,
+                    ideal_answer=(
+                        active_question.ideal_answer if active_question else ""
+                    ),
+                )
+                off_topic_state = TurnAssessmentState(
+                    assessed_concept_id=concept_id,
+                    evaluation_result=EvaluationResultType.HESITANT,
+                    mastery_delta=0.0,
+                    next_target_node=concept_id,
+                    graph_relation_followed=(
+                        "SESSION_TOPIC_CLARIFICATION"
+                        if turn_intent == "TOPICAL_CLARIFICATION"
+                        else "SESSION_OFF_TOPIC_REDIRECT"
+                    ),
+                )
+                self.last_ai_directive = spoken_directive
+                self.last_turn_assessment = off_topic_state
+                self._last_context = off_topic_context
+                self._last_processed_transcript = clean_text
+                self._last_processed_ts = now_ts
+                self.record_event(
+                    "STUDENT_TURN_ROUTED",
+                    {
+                        "transcript": clean_text,
+                        "concept_id": concept_id,
+                        "intent": turn_intent,
+                        "attempt_consumed": False,
+                    },
+                )
+                self.save_session_state(self.state_file_path)
+                return off_topic_context, off_topic_state
 
             # A request to change topic is a choice, not an answer to the exam
             # question. Handle it before evaluation so it cannot be scored as VAGUE.
@@ -840,14 +972,6 @@ class SessionAssessmentManager:
                 return new_context, turn_assessment
 
             # 1. Evaluate student's response
-            active_plan_item = (
-                self.examination_plan.items.get(concept_id)
-                if self.examination_plan
-                else None
-            )
-            active_question = (
-                active_plan_item.planned_question if active_plan_item else None
-            )
             eval_detail: EvaluationDetail = self.evaluator.evaluate_response(
                 student_response=clean_text,
                 target_concept=current_concept,
@@ -872,8 +996,6 @@ class SessionAssessmentManager:
             if self.examination_plan
             else None
         )
-
-        is_skip_request = any(phrase in msg_lower for phrase in SKIP_REQUEST_PHRASES)
 
         if is_skip_request and plan_item:
             self.examination_plan.defer_concept(concept_id)
@@ -1209,23 +1331,48 @@ class SessionAssessmentManager:
 
         return new_context, turn_assessment
 
+    async def _paused_wait_response(
+        self,
+    ) -> tuple[ExaminerContext, TurnAssessmentState]:
+        """Acknowledge speech during a pause without treating it as an answer."""
+        concept_id = self.current_concept_id or "general_introduction"
+        current_concept = await self.graph_store.get_concept(concept_id)
+        concept_name = current_concept.name if current_concept else concept_id
+        spoken_directive = "Va bene, resto in pausa. Dimmi tu quando vuoi riprendere."
+        context = ExaminerContext(
+            current_concept=current_concept
+            or ConceptNode(id=concept_id, name=concept_name),
+            pedagogical_state=self.current_pedagogical_state,
+            pedagogical_directive=spoken_directive,
+        )
+        turn_assessment = TurnAssessmentState(
+            assessed_concept_id=concept_id,
+            evaluation_result=EvaluationResultType.HESITANT,
+            mastery_delta=0.0,
+            next_target_node=concept_id,
+            graph_relation_followed="SESSION_PAUSE_WAIT",
+        )
+        return context, turn_assessment
+
     async def pause_session(
         self, reason: str = ""
     ) -> tuple[ExaminerContext, TurnAssessmentState]:
         """Pauses the oral examination and persists current state to disk."""
+        if self.status == SessionStatus.PAUSED:
+            return await self._paused_wait_response()
         self.status = SessionStatus.PAUSED
         concept_id = self.current_concept_id or "general_introduction"
         current_concept = await self.graph_store.get_concept(concept_id)
         concept_name = current_concept.name if current_concept else concept_id
 
         spoken_directive = (
-            f"Certamente! Ho messo in pausa l'esame e salvato i tuoi progressi al concetto '{concept_name}'. "
-            "Quando vorrai riprendere, basterà dirmelo e ripartiremo esattamente da qui. A presto!"
+            "Va bene, ho messo in pausa l'esame. Prenditi pure il tempo che ti serve; "
+            f"dimmi tu quando vuoi riprendere e continueremo da '{concept_name}'."
         )
 
         turn_assessment = TurnAssessmentState(
             assessed_concept_id=concept_id,
-            evaluation_result=EvaluationResultType.ACCURATE,
+            evaluation_result=EvaluationResultType.HESITANT,
             mastery_delta=0.0,
             next_target_node=concept_id,
             graph_relation_followed="SESSION_PAUSE",

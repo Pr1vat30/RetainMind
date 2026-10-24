@@ -16,7 +16,7 @@ retain_mind/
 │   ├── models/                       # Modelli dati tipizzati (Session, Plan, Report)
 │   ├── services/
 │   │   ├── api_service.dart          # Client REST per sessioni, corsi, piani e report
-│   │   └── pipecat_service.dart     # Audio PCM su WebSocket verso il backend Pipecat
+│   │   └── pipecat_service.dart     # Audio WebRTC SmallWebRTC (predefinito) e WebSocket PCM
 │   ├── providers/
 │   │   └── exam_provider.dart        # State Management centralizzato
 │   ├── screens/
@@ -31,7 +31,7 @@ retain_mind/
 │       ├── bkt_progress_bar.dart     # Progresso esame e badge FSM
 │       └── transcript_bubble.dart    # Turni di conversazione con ΔMastery
 │
-├── pubspec.yaml                      # Dipendenze Flutter (audio PCM, WebSocket, provider, grafici)
+├── pubspec.yaml                      # Dipendenze Flutter (WebRTC, audio PCM fallback, REST, provider, grafici)
 ├── android/                          # Configurazione Android (permessi microfono e rete)
 ├── ios/                              # Configurazione iOS (NSMicrophoneUsageDescription)
 ├── macos/                            # Configurazione macOS (audio-input & network entitlements)
@@ -69,9 +69,13 @@ cd backend
 
 `start_agent_cloud.sh` è mantenuto per compatibilità e richiama lo stesso server: non avviare entrambi gli script contemporaneamente.
 
-La modalità vocale predefinita è Gemini Live (`gemini-3.8-live`, voce `Aoede`). Per usare in alternativa la pipeline cascaded STT → LLM → TTS, impostare `AGENT_PIPELINE_MODE=cascaded` in `backend/.env.local`.
+La modalità vocale predefinita è Gemini Live (`gemini-3.8-live`, voce `Aoede`). La pipeline cascaded STT → LLM → TTS è opzionale e si attiva con `AGENT_PIPELINE_MODE=cascaded` in `backend/.env.local`.
 
-Per creare un piano da un argomento, l'app consente di scegliere livello e durata e mostra una revisione della dispensa e degli argomenti generati prima di avviare l'interrogazione. Il modello predefinito di generazione del piano è `gemini-3.5-flash-lite` (`PLAN_GENERATION_MODEL`).
+Flutter usa SmallWebRTC per l'audio per impostazione predefinita; il signaling avviene tramite FastAPI e il media viaggia sul peer WebRTC. Il WebSocket PCM resta disponibile come fallback (`--dart-define=USE_WEBRTC_AUDIO=false`). Su Android WebRTC mantiene `MODE_IN_COMMUNICATION` per acquisizione e routing bidirezionale, mentre gli attributi dell'uscita sono impostati su `USAGE_MEDIA` e `CONTENT_TYPE_MUSIC`; AEC, noise suppression e auto gain control sono richiesti dal client.
+
+Per creare un piano da un argomento, l'app consente di scegliere livello e durata e mostra una revisione della dispensa e degli argomenti generati prima di avviare l'interrogazione. Il modello predefinito per estrazione e generazione del piano è `gemini-3.5-flash-lite` (`PLAN_GENERATION_MODEL`), indipendente dal modello vocale.
+
+Durante l'esame, le risposte sostanziali vengono valutate sui punti attesi e sul materiale del corso. Le richieste di pausa/ripresa non sono risposte; un chiarimento pertinente non consuma tentativi; le digressioni chiaramente estranee vengono reindirizzate senza valutazione né avanzamento del piano. Il numero minimo di tentativi per un argomento è tre; dopo i tentativi l'agente chiede se offrire un indizio o passare oltre, e attende una scelta chiara.
 
 ### 2. Avviare l'Applicazione Flutter (da Android Studio o da terminale)
 Dalla radice del progetto:

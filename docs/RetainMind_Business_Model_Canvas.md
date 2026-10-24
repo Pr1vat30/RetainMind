@@ -33,7 +33,8 @@ Il presente documento è articolato in due parti:
 │ 6. KEY RESOURCES        │                         │   sui propri materiali  │ 3. CHANNELS             │                         │
 │                         │                         │   (PDF, slide, appunti) │                         │                         │
 │ • Pipeline Pipecat │                         │                         │ • Web Application       │                         │
-│   Pipecat WebSocket PCM │                         │                         │   e Mobile Voice Room   │                         │
+│   SmallWebRTC default;  │                         │                         │   e Mobile Voice Room   │                         │
+│   PCM WebSocket fallback│                         │                         │                         │                         │
 │ • Modello BKT & FSM     │                         │                         │ • Passaparola virale &  │                         │
 │   di valutazione vocale │                         │                         │   community studentesche│                         │
 │ • Motore GraphRAG       │                         │                         │ • Social Education      │                         │
@@ -67,7 +68,7 @@ Il presente documento è articolato in due parti:
 * **Accademie di Formazione e Business School Private:** Istituti che desiderano offrire un tutor vocale proprietario personalizzato per i propri iscritti.
 
 ### 3. Channels (Canali)
-* **Canali di Fruizione (Delivery):** Client Flutter con audio WebSocket PCM; WebRTC tramite signaling SmallWebRTC dove configurato e CLI per power users/sviluppatori.
+* **Canali di Fruizione (Delivery):** Client Flutter con SmallWebRTC come trasporto audio predefinito e WebSocket PCM come fallback; CLI per power users/sviluppatori.
 * **Canali di Acquisizione B2C:** 
   * Passaparola virale tra studenti e gruppi corso (Telegram, WhatsApp, Discord accademici).
   * Content marketing "Study-with-me" e dimostrazioni audio su TikTok, Instagram Reels, YouTube Edu.
@@ -87,7 +88,7 @@ Il presente documento è articolato in due parti:
 * **B2B — Piani Custom per Scuole Forensi & Post-Laurea:** Setup fee per ontologie personalizzate di facoltà + abbonamento enterprise con SLA dedicato.
 
 ### 6. Key Resources (Risorse Chiave)
-* **Architettura Tecnologica Vocale:** Pipeline vocale real-time basata su Pipecat, con WebSocket PCM per Flutter e modalità Gemini Live predefinita; la pipeline cascaded è opzionale. La generazione dei piani usa `gemini-3.5-flash-lite` come default.
+* **Architettura Tecnologica Vocale:** Pipeline vocale real-time Pipecat con SmallWebRTC predefinito e WebSocket PCM di fallback; Gemini Live è la modalità vocale predefinita e la pipeline cascaded è opzionale. La generazione dei piani usa `gemini-3.5-flash-lite` come default.
 * **Algoritmi e Modelli Proprietari:** Motore pedagogico FSM, implementazione del Bayesian Knowledge Tracing (BKT) e logica di Root Cause Analysis (RCA).
 * **Infrastruttura Dati Hybrid GraphRAG:** Grafo della conoscenza ontologico (Neo4j) e database vettoriale (Qdrant) per l'indicizzazione concettuale topologica.
 * **Modelli Fondazionali di Linguaggio e Voce:** Accesso a Gemini Live come modalità vocale predefinita e a modelli cascaded (STT, LLM, TTS) come alternativa opzionale.
@@ -168,7 +169,7 @@ Il modello individua un approccio ibrido **B2C (Student-First)** e **B2B / B2B2C
 I canali riflettono la doppia natura dell'iniziativa, orchestrando l'esperienza utente e la penetrazione commerciale.
 
 #### Canali di Erogazione e Fruizione (Delivery Channels)
-* **Client vocale Flutter:** invia e riceve audio PCM via WebSocket e visualizza trascrizione e stato audio. SmallWebRTC signaling è disponibile per client WebRTC compatibili.
+* **Client vocale Flutter:** usa SmallWebRTC per acquisire e riprodurre l'audio e visualizza trascrizione e stato audio; mantiene il protocollo PCM via WebSocket come fallback.
 * **Progressive Web App (PWA) / Mobile App:** Ottimizzata per l'uso in mobilità (ad es. ripasso orale all'aperto o in cuffia camminando).
 * **CLI (Command Line Interface - `session_cli.py`):** Un canale potente per power user, ricercatori e studenti informatici che preferiscono operare da terminale con esportazioni immediate in Markdown dei propri appunti d'esame.
 
@@ -245,7 +246,7 @@ La sostenibilità economica si fonda su un modello ibrido ad alto margine lordo 
 Le risorse chiave garantiscono il vantaggio competitivo e l'eccellenza dell'esperienza d'uso.
 
 #### Risorse Tecnologiche e Proprietà Intellettuale
-* **Pipeline Vocale Real-Time:** Backend FastAPI/Pipecat con WebSocket PCM per Flutter e signaling SmallWebRTC opzionale; le prestazioni dipendono da provider e dispositivo.
+* **Pipeline Vocale Real-Time:** Backend FastAPI/Pipecat con SmallWebRTC predefinito per Flutter e WebSocket PCM come fallback; le prestazioni dipendono da provider e dispositivo.
 * **Architettura Dual GraphRAG:**
   * **Neo4j:** Gestisce l'ontologia delle dipendenze concettuali (`ConceptNode`, relazioni `REQUIRES`, `CAUSES`, `CONTRASTS_WITH`), permettendo la navigazione topologica dei prerequisiti.
   * **Qdrant:** Vettore ad alte prestazioni con indicizzazione HNSW per il recupero di passaggi di "Ground Truth" con cui validare la correttezza tecnica.
@@ -290,7 +291,7 @@ Le attività critiche necessarie per creare, distribuire e mantenere la proposta
 
 La rete di partnership strategiche consente a RetainMind di concentrarsi sulla propria logica di business e pedagogica senza reinventare l'infrastruttura fondamentale.
 
-* **Pipecat e provider di hosting:** Componenti del runtime vocale e dell'infrastruttura applicativa; SmallWebRTC è disponibile per signaling WebRTC.
+* **Pipecat e provider di hosting:** Componenti del runtime vocale e dell'infrastruttura applicativa; SmallWebRTC è il trasporto predefinito dell'app Flutter.
 * **Google (generazione piani e Gemini Live predefinito):** Il modello predefinito per piani e materiali da argomento è `gemini-3.5-flash-lite`; il modello vocale predefinito è `gemini-3.8-live` con voce `Aoede`.
 * **Provider cascaded (Deepgram, OpenAI, ElevenLabs e altri):** Servizi configurabili per STT, LLM e TTS nella pipeline vocale opzionale.
 * **Database Vendors (Neo4j & Qdrant):** Partner tecnologici per il data storage a grafo e vettoriale ad alte prestazioni.
@@ -306,7 +307,7 @@ L'analisi dei costi operativi e di sviluppo mette in luce la scalabilità del mo
 #### A. Costi Variabili di Inferenza e Computing (Direttamente proporzionali all'uso)
 * **Costi dei modelli vocali e LLM:** Dipendono da Gemini Live (modalità predefinita) oppure dai servizi STT, LLM e TTS se si attiva la modalità cascaded.
 * **Costi di Embedding e Ingestion:** Dipendono dall'implementazione configurata; gli embedding sono mock per default.
-* **Costi di Traffico Audio:** Traffico PCM via WebSocket per Flutter o WebRTC se utilizzato.
+* **Costi di Traffico Audio:** Traffico WebRTC per il percorso predefinito e PCM via WebSocket quando si usa il fallback.
 
 #### B. Costi Fissi e Semi-Variabili di Infrastruttura
 * **Hosting Cluster Database:** Server dedicati o istanze cloud managed per Neo4j Aura / cluster Neo4j e Qdrant Cloud.

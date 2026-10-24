@@ -1,9 +1,9 @@
 """RetainMind REST, WebRTC & WebSocket API Server for Flutter & Client Interfaces.
 
 Powered by Pipecat:
-1. WebRTC peer-to-peer audio via SmallWebRTCTransport (/api/offer).
-2. Bidirectional raw PCM WebSocket audio streaming via FastAPIWebsocketTransport
-   (/ws, /ws/{course_id}) for the RetainMind Flutter client.
+1. Default Flutter voice path: WebRTC audio via SmallWebRTCTransport (/api/offer).
+2. Fallback bidirectional raw PCM WebSocket audio streaming via
+   FastAPIWebsocketTransport (/ws, /ws/{course_id}).
 3. Full REST API for examination session lifecycle, telemetry, BKT mastery, courses, and syllabus.
 """
 
@@ -106,7 +106,11 @@ def create_app() -> FastAPI:
         return Response(status_code=204, headers=_cors_headers())
 
     # Initialize SmallWebRTCRequestHandler for peer-to-peer WebRTC connections
-    webrtc_handler = SmallWebRTCRequestHandler()
+    # Keep client/server ICE configuration aligned for WebRTC peers outside
+    # the same local network as well as local development sessions.
+    webrtc_handler = SmallWebRTCRequestHandler(
+        ice_servers=list(config.webrtc_stun_servers)
+    )
 
     # -------------------------------------------------------------------------
     # Health & Diagnostics
