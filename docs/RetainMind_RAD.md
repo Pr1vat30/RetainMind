@@ -4,802 +4,692 @@
   # Requirements Analysis Document (RAD) — RetainMind
 </div>
 
-**Document Title:** Requirements Analysis Document (RAD) for RetainMind Oral Study Assistant
-**Project Name:** RetainMind
-**Document Identifier:** RM-RAD-2026-V2.0
-**Current Milestone:** Flutter + FastAPI/Pipecat Architecture v3.0
-**Compliance Standards:** IEEE Std 830-1998 / ISO/IEC/IEEE 29148:2018
-**Author:** RetainMind Engineering Team
+**Titolo del Documento:** Requirements Analysis Document (RAD) per l'Assistente allo Studio Orale RetainMind
+**Nome del Progetto:** RetainMind
+**Identificativo del Documento:** RM-RAD-2026-V2.0
+**Modello di Riferimento:** Bruegge & Dutoit OOSE RAD Specification Template
+**Autore:** Team di Ingegneria RetainMind
 
 ---
 
-# 1. Introduction
+# 1. Introduzione
 
-## 1.1 Purpose of the system
+## 1.1 Scopo del sistema
 
-The purpose of **RetainMind** is to deliver an AI-native, voice-first oral examination and continuous assessment assistant for university and higher-education students in cognitively demanding, high-density academic disciplines (e.g., Computer Science, Medicine, Law, Engineering, and Physics).
+Lo scopo fondamentale di **RetainMind** è fornire agli studenti universitari e dell'istruzione superiore un assistente vocale intelligente e autonomo, progettato per l'allenamento intensivo, la simulazione dialettica e la valutazione formativa in vista degli esami orali universitari. Il sistema si rivolge prioritariamente a discipline caratterizzate da un'elevata densità concettuale e complessità nozionistica, quali Informatica, Ingegneria, Medicina, Giurisprudenza, Economia e Fisica teorica.
 
-Traditional computer-assisted learning tools rely predominantly on passive multiple-choice quizzes or static text flashcards (e.g., Anki, SuperMemo). While effective for memorizing atomic facts, such tools fail to prepare students for the systemic rigors of formal oral examinations, which require articulate verbal explanations, multi-hop reasoning, causal attribution, and rapid real-time defense of conceptual arguments.
+Nel panorama educativo contemporaneo, la quasi totalità degli strumenti di supporto allo studio basati sulla tecnologia adotta modalità di interazione passive o semplificate: quiz a scelta multipla, schede mnemoniche digitali (*flashcard*) ed esercizi di riempimento testuale. Sebbene tali approcci risultino utili per memorizzare definizioni atomiche e dati isolati, essi falliscono radicalmente nel preparare lo studente alla prova d'esame orale. La discussione con un docente universitario richiede infatti competenze cognitive di ordine superiore:
+* La capacità di formulare ragionamenti causali articolati (*multi-hop reasoning*), collegando nozioni propedeutiche a fenomeni complessi.
+* La prontezza nel rispondere a tono e con proprietà di linguaggio specialistico sotto pressione temporale.
+* La padronanza nell'orientarsi quando l'esaminatore pone domande di approfondimento (*narrowing questions*), propone casi limite (*stress-test*) o introduce nozioni apparentemente simili per verificare la solidità della comprensione concettuale.
 
-RetainMind addresses this pedagogical gap by functioning as an **Autonomous Socratic Oral Examiner**. The system ingests authentic course materials (PDF textbooks, lecture slides, Markdown notes), constructs an ontological knowledge graph and dense vector index, derives a topologically structured examination plan, and conducts a bidirectional, full-duplex spoken interrogation session. During the interrogation, the system compares transcribed answers with expected key points, updates BKT estimates, and uses the active plan to guide follow-up questions and summarize progress.
-
----
-
-## 1.2 Scope of the system
-
-### 1.2.1 In-Scope Capabilities (Current & Proposed)
-
-* **Document Ingestion & Extraction:** Automated text extraction and chunking for supported PDF, Markdown, and TXT materials. OCR support for scanned PDFs is not documented as an active capability.
-* **Ontological Graph & Vector Indexing:** Extraction of `ConceptNode` entities, directed relationships (`REQUIRES`, `CAUSES`, `CONTRASTS_WITH`, `EXPANDS`), and text chunks stored in dual databases (**Neo4j** for graph topology and **Qdrant** for dense vector embeddings), with in-memory stores used by the current default setup.
-* **Topological Examination Planning:** Automated derivation of structured `ExaminationPlan` objects with pre-calculated question blueprints (main Socratic inquiry, narrowing probes, scaffolding hints, collision checks) ordered by topological prerequisite dependencies.
-* **Pipecat Voice Agent:** Real-time oral examination served by FastAPI. Flutter uses SmallWebRTC by default and can fall back to PCM WebSocket. Gemini Live is the default voice mode (`gemini-3.8-live`, voice `Aoede`); cascaded STT → LLM → TTS is optional.
-* **Optional Cascaded Voice Pipeline:** Modular streaming Speech-to-Text, LLM reasoning, and Text-to-Speech, enabled with `AGENT_PIPELINE_MODE=cascaded`; the effective providers depend on the selected implementation and available credentials.
-* **Plan-Based Response Evaluation & Intent Routing:** Substantive transcript answers are compared with expected key points using lexical/stem heuristics. Pause/resume controls, relevant clarification questions, and clear off-topic digressions are routed separately and do not consume answer attempts or update BKT.
-* **Bayesian Knowledge Tracing (BKT) & Pedagogical FSM:** Real-time tracking of latent concept mastery probabilities, driving a pedagogical Finite State Machine with dynamic states (`EXPLORATION`, `CAUSAL_NARROWING`, `SCAFFOLDING`, `CONCEPTUAL_COLLISION`, `PREREQUISITE_FALLBACK`).
-* **Deferred Retry Queue:** Concepts can be revisited during the examination; ordering and retry behavior follow the current examination plan and assessment state.
-* **Session Lifecycle, Longitudinal Analytics & Persistence:** Mid-exam pausing, seamless resumption, multi-iteration retakes with dynamic pedagogical recalibration, $\Delta\text{Mastery}$ delta tracking, prerequisite Root Cause Analysis, complete turn-by-turn conversation logging, and CLI management.
-
-### 1.2.2 Out-of-Scope Capabilities (Explicitly Excluded / Deprecated)
-
-* **Legacy E-Commerce & User Profile Management:** All legacy modules regarding shopping carts, orders, product catalogs, customer profiles, and general-purpose CRUD operations have been permanently excised from the codebase.
-* **Third-Party LMS Synchronizers (Canvas/Moodle/Blackboard):** Direct automated synchronization with proprietary university gradebooks is excluded from the current release.
-* **Synchronous Multi-Student Group Oral Exams:** The system is exclusively scoped for 1-on-1 student-examiner interactions.
+RetainMind colma questa lacuna introducendo la figura dell'**Esaminatore Orale Socratico Autonomo**. Il sistema prende in carico i materiali didattici autentici forniti dallo studente (libri di testo, dispense dei professori, appunti e sintesi tematiche), li scompone e li analizza per distillare una vera e propria ontologia della disciplina. A partire da questa rete concettuale, RetainMind pianifica strategicamente l'interrogazione, stabilendo quali argomenti verificare per primi in base alle loro relazioni di propedeuticità logica. Durante il colloquio vocale in tempo reale, il sistema dialoga a voce con lo studente a bassa latenza, ne ascolta attentamente le risposte, misura la sicurezza espositiva, identifica con precisione chirurgica le lacune teoriche e le misconcezioni, applica tecniche di supporto graduale (*scaffolding*) e aggiorna costantemente la stima probabilistica della padronanza dello studente, offrendo infine un quadro diagnostico approfondito per guidare le successive sessioni di studio.
 
 ---
 
-## 1.3 Objectives and success criteria of the project
+## 1.2 Ambito del sistema
 
-### 1.3.1 Primary Technical Objectives
+### 1.2.1 Funzionalità nell'Ambito
 
-1. **Sub-Second Voice Turnaround:** Measure and reduce end-to-end voice latency for the configured Pipecat pipeline across supported client transports.
-2. **Context-Grounding Fidelity:** Ground questions in the active plan and retrieved material where available; measure factual accuracy through evaluation.
-3. **Dynamic Pedagogical Scaffolding:** Use plan-based follow-up questions for incomplete answers where the plan provides suitable prompts.
-4. **State Persistence Integrity:** Preserve session progress through the save and resume paths currently provided by the service.
+* **Ingestion ed Elaborazione Concettuale dei Documenti Didattici:** Importazione automatica di materiali di studio digitali in molteplici formati testuali, con bonifica del contenuto verbale, conservazione della gerarchia delle sezioni e suddivisione semantica del testo.
+* **Costruzione del Grafo Ontologico e Indicizzazione Vettoriale Ibrida (GraphRAG):** Riconoscimento dei concetti cardine della materia e delle loro connessioni semantiche (prerequisiti necessari, implicazioni causali, relazioni di contrasto e approfondimento), combinato con l'indicizzazione vettoriale per consentire il recupero istantaneo di passaggi fedeli (*Ground Truth*) a supporto di ogni quesito.
+* **Pianificazione Topologica e Didattica dell'Esame:** Ordinamento rigoroso degli argomenti basato sull'analisi delle dipendenze concettuali (garantendo che le basi propedeutiche precedano i temi avanzati) e pre-generazione di schede didattiche complete (domanda aperta principale, risposta ideale, punti chiave irrinunciabili, sotto-domande di approfondimento, suggerimenti graduali e controlli di collisione).
+* **Conduzione dell'Esame Vocale Bidirezionale Full-Duplex:** Interazione orale fluida in tempo reale con bassissima latenza, dotata di rilevamento vocale continuo, interruzione immediata della voce dell'esaminatore non appena lo studente prende la parola (*barge-in*) e supporto sia per modelli multimodali nativi a voce sia per pipeline a cascata.
+* **Instradamento Intelligente dei Turni di Parola (Turn Routing):** Discriminazione immediata tra una reale risposta d'esame, una richiesta operativa di pausa/ripresa, una domanda di chiarimento didattico o una digressione fuori tema, instradando ciascun intento senza penalizzazioni o consumi indebiti di tentativi.
+* **Valutazione Diagnostica Sfaccettata e Analisi delle Esitazioni:** Confronto qualitativo e quantitativo dell'argomentazione dello studente rispetto ai punti chiave attesi, integrato con l'analisi delle pause iniziali e dei riempitivi verbali per discriminare sicurezza, esitazione, vaghezza o misconcezione.
+* **Tracciamento Probabilistico della Conoscenza (Bayesian Knowledge Tracing):** Modellazione matematica dello stato cognitivo latente per ciascun argomento, distinguendo scivoloni accidentali (*slip*) da intuizioni casuali (*guess*) per stimare con precisione la padronanza effettiva.
+* **Guida Didattica Adattiva a Macchina a Stati Finiti (FSM):** Regolazione della postura dell'esaminatore tramite stati pedagogici dedicati (esplorazione ordinaria, focalizzazione causale, supporto graduale con indizi, disambiguazione concettuale e recupero sui prerequisiti).
+* **Coda di Rinvio Ciclica per il Recupero delle Fragilità:** Gestione flessibile dei concetti non superati o saltati, che vengono reinseriti in una coda di ripasso e riproposti allo studente verso la fine del colloquio.
+* **Conservazione Atomica dello Stato e Analisi delle Cause Radice (Root Cause Analysis - RCA):** Registrazione sincrona della memoria d'esame a ogni turno per consentire il ripristino istantaneo in caso di disconnessione, confronto longitudinale tra prove successive ed elaborazione di verbali analitici che tracciano l'origine delle difficoltà teoriche.
 
-### 1.3.2 Measurable Success Criteria
+### 1.2.2 Funzionalità Fuori Ambito
 
-| Criterion ID | Metric / Target | Verification Method |
+* **Sessioni d'Esame Collettive Simultanee:** Il sistema è progettato per il colloquio individuale uno-a-uno; non supporta stanze vocali simultanee con più studenti esaminati insieme.
+* **Verbalizzazione e Integrazione con Registri Universitari:** L'attribuzione di voti con valore legale e la registrazione automatica sui portali accademici istituzionali esulano dalle finalità della piattaforma.
+* **Videosorveglianza e Riconoscimento Biometrico (Proctoring):** Il sistema non include algoritmi invasivi di videosorveglianza, puntamento oculare o verifica biometrica dell'identità.
+
+---
+
+## 1.3 Obiettivi e criteri di successo del progetto
+
+### 1.3.1 Obiettivi del Progetto
+
+1. **Interazione Vocale Naturale e Tempestiva:** Offrire un'esperienza conversazionale a bassa latenza paragonabile a un colloquio con un docente umano, azzerando le attese percepite.
+2. **Ancoraggio Rigoroso e Assenza di Allucinazioni:** Vincolare ogni quesito e valutazione ai materiali caricati dallo studente, garantendo che il modello linguistico non inventi definizioni estranee al programma d'esame.
+3. **Approccio Maieutico e Costruttivo:** Stimolare la riflessione critica guidata piuttosto che fornire giudizi sommari o soluzioni preconfezionate.
+4. **Resilienza della Sessione di Studio:** Assicurare che nessuna interruzione di rete o chiusura accidentale dell'app provochi la perdita delle valutazioni o dell'avanzamento maturato.
+
+### 1.3.2 Criteri di Successo
+
+| ID Criterio | Ambito / Obiettivo | Metodo di Validazione e Risultato Atteso |
 | :--- | :--- | :--- |
-| **SC-01** | Reliable behavior across assessment, planning, ingestion, and audio transport | Focused unit and integration tests; no coverage percentage is currently asserted |
-| **SC-02** | Audio playback and interruption behavior are usable across supported devices | Manual device checks plus transport and serializer tests |
-| **SC-03** | Assessment state transitions follow configured rules | Focused tests for session and FSM transitions |
-| **SC-04** | Session state can be resumed from saved session and plan data | Session lifecycle and restart tests |
-| **SC-05** | Session history and comparisons produce internally consistent results | Assessment service and report checks |
+| **SC-01** | Coerenza Globale dell'Architettura | Esecuzione con esito positivo di tutti i test automatizzati sui moduli di ingestion, pianificazione, valutazione diagnostica e gestione della sessione. |
+| **SC-02** | Stabilità del Flusso Audio e Barge-In | Verifica su dispositivi fisici della corretta acquisizione microfonica a due vie, della soppressione del riverbero e dell'arresto immediato della voce dell'agente al parlato dello studente. |
+| **SC-03** | Determinismo delle Transizioni Pedagogiche | Controllo formale delle regole della macchina a stati finiti: a fronte di risposte parziali o errate, la transizione verso stati di supporto deve avvenire in modo coerente e predicibile. |
+| **SC-04** | Integrità del Ripristino dello Stato | Capacità di riprendere un'interrogazione interrotta a metà senza alcuna perdita di punteggi, trascrizioni storiche o avanzamento nella scaletta dei concetti. |
+| **SC-05** | Valutazione Longitudinale e Diagnosi RCA | Generazione di report coerenti che quantificano l'incremento di padronanza concettuale tra sessioni successive e rintracciano le cause radice dei fallimenti sui prerequisiti. |
 
 ---
 
-## 1.4 Definitions, acronyms, and abbreviations
+## 1.4 Definizioni, acronimi e abbreviazioni
 
-| Term / Acronym | Definition |
+| Termine / Acronimo | Definizione Concettuale |
 | :--- | :--- |
-
-| **BKT** | Bayesian Knowledge Tracing — a probabilistic graphical model estimating latent student concept mastery $P(L_t)$. |
-| **CCS** | Causal Coherence Score — structural metric evaluating the logical and causal validity of an explanation. |
-| **DAG** | Directed Acyclic Graph — topological representation of course concepts and prerequisite dependencies. |
-| **Hesitation cue** | Heuristic based on transcript fillers and available pause duration. |
-| **FSM** | Finite State Machine — mathematical model governing examiner pedagogical dialogue states. |
-| **GraphRAG** | Hybrid Retrieval-Augmented Generation combining ontological graph traversals with dense vector similarity search. |
-| **Ground Truth** | Verbatim reference excerpts extracted from ingested course literature used to validate student claims. |
-| **Pipecat** | Python framework for composing real-time audio and conversational pipelines. |
-| **WebSocket PCM** | Client-server transport carrying mono PCM audio frames encoded in the Flutter protocol. |
-| **RCA** | Root Cause Analysis — algorithm identifying deep-seated prerequisite failures underlying higher-level concept errors. |
-
-| **Cascaded pipeline** | Sequential speech-to-text, language-model, and text-to-speech processing. |
-| **Scaffolding** | Pedagogical technique offering guided hints and sub-questions to help a struggling student deduce the correct answer. |
-| **STT / TTS** | Speech-to-Text (Transcription) / Text-to-Speech (Synthesis). |
-
+| **BKT** | *Bayesian Knowledge Tracing* — Modello matematico a rete bayesiana che aggiorna dinamicamente la probabilità a posteriori che uno studente padroneggi stabilmente un concetto teorico. |
+| **Barge-in** | Meccanismo acustico che zittisce istantaneamente la sintesi vocale dell'esaminatore nel momento esatto in cui lo studente prende la parola. |
+| **DAG** | *Directed Acyclic Graph* (Grafo Diretto Aciclico) — Struttura topologica in cui i concetti del corso sono nodi e le relazioni di propedeuticità sono archi orientati privi di cicli chiusi. |
+| **FSM** | *Finite State Machine* (Macchina a Stati Finiti) — Modello di controllo che disciplina le strategie didattiche dell'esaminatore sintetico. |
+| **GraphRAG** | Architettura combinata che unisce la navigazione strutturata sul grafo della conoscenza alla ricerca per similarità semantica vettoriale. |
+| **Ground Truth** | Insieme dei frammenti e delle definizioni testuali fedeli estratti direttamente dai materiali caricati dallo studente, utilizzati come metro di verità per validare le risposte. |
+| **Pipecat** | Framework specializzato per la composizione modulare di pipeline multimediali e conversazionali vocali in tempo reale. |
+| **RCA** | *Root Cause Analysis* (Analisi delle Cause Radice) — Procedura diagnostica che risale la catena dei prerequisiti logici per individuare la lacuna originaria che ha provocato l'errore su un argomento complesso. |
+| **Scaffolding** | Tecnica maieutica che fornisce aiuti e sotto-domande graduate per supportare lo studente nel dedurre autonomamente la risposta corretta. |
+| **VAD** | *Voice Activity Detection* — Algoritmo che distingue in tempo reale la presenza di voce umana dal silenzio e dai rumori di fondo. |
+| **WebRTC** | Protocollo standard per lo scambio bidirezionale di flussi multimediali (audio/video) in tempo reale su rete a bassa latenza. |
 
 ---
 
-## 1.5 References
+## 1.5 Riferimenti
 
-1. **Original Specification:** `RetainMind_Technical_RAG_Specification.md` (Initial Conceptual Blueprint).
-2. **IEEE Std 830-1998:** IEEE Recommended Practice for Software Requirements Specifications.
-3. **ISO/IEC/IEEE 29148:2018:** Systems and software engineering — Life cycle processes — Requirements engineering.
-4. **Pipecat:** Voice pipeline and transport implementation used by the backend.
-5. **Google Gemini Live API:** Default native audio pipeline configured by `GEMINI_LIVE_MODEL`; cascaded processing is optional.
-6. **Bayesian Knowledge Tracing Formulation:** Corbett, A. T., & Anderson, J. R. (1994). *Knowledge tracing: Modeling the acquisition of procedural knowledge.* User Modeling and User-Adapted Interaction.
+1. **Metodologia del Dialogo Socratico e Apprendimento Attivo:** Principi di maieutica applicati all'istruzione superiore, alla formulazione di domande aperte e al rafforzamento della comprensione critica concettuale.
+2. **Modellazione Cognitiva tramite Bayesian Knowledge Tracing:** Corbett, A. T., & Anderson, J. R. (1994). *Knowledge tracing: Modeling the acquisition of procedural knowledge*. User Modeling and User-Adapted Interaction, 4(4), 253-278.
+3. **Architetture GraphRAG e Retrieval Ibrido:** Metodologie per l'indicizzazione e l'interrogazione congiunta di ontologie simboliche a grafo e rappresentazioni vettoriali dense nei modelli linguistici moderni.
+4. **Standard OOSE (Object-Oriented Software Engineering):** Bruegge, B., & Dutoit, A. H. *Object-Oriented Software Engineering: Using UML, Patterns, and Java*. Prentice Hall.
 
 ---
 
-## 1.6 Overview
+## 1.6 Panoramica del documento
 
-This RAD is organized into the following major chapters:
-* **Section 2 (Current System):** Documents the exact architecture, components, data flows, storage layers, audio pipelines, and configuration options implemented in the codebase today.
-* **Section 3 (Proposed System):** Details the target system evolution, structured Functional Requirements (FR-001 through FR-016), Non-Functional Requirements (NFRs), System Scenarios, Use Case Models, Object Models, Dynamic Models, and UI Wireframes.
-* **Section 4 (Glossary):** Comprehensive technical lexicon.
-* **Section 5 (Architecture Evolution & Trade-offs):** Retrospective analysis of architectural shifts, abandoned prototypes, and technical justifications.
-* **Section 6 (Configuration Matrix):** Detailed breakdown of all environment and runtime variables.
+Il presente Requirements Analysis Document è strutturato in conformità al modello di specifica OOSE:
+* **Sezione 2 (Sistema Attuale):** Descrive lo stato dell'arte e le modalità con cui gli studenti preparano tradizionalmente gli esami orali universitari, evidenziando le limitazioni cognitive, metodologiche e pratiche dei metodi correnti.
+* **Sezione 3 (Sistema Proposto):** Documenta l'ingegneria dei requisiti e il modello di analisi del nuovo sistema. Include una panoramica approfondita del funzionamento passo-passo del backend (3.1), i requisiti funzionali formali (3.2), i requisiti non funzionali dettagliati (3.3) e la suite completa dei modelli di sistema (3.4) con scenari, casi d'uso, modello ad oggetti, modello dinamico e interfacce utente.
+* **Sezione 4 (Glossario):** Fornisce un glossario organico dei termini tecnici, pedagogici e architetturali impiegati nella specifica, a garanzia di coerenza e univocità lessicale.
 
 ---
 
-# 2. Current System
+# 2. Sistema Attuale
 
-## 2.1 Current Architecture Overview
+## 2.1 Descrizione dello Stato dell'Arte
 
-The Flutter app offers topic-based plan generation with configurable study level and duration, then lets the student review the generated handout and concepts before beginning the oral exam. The default plan-generation model is `gemini-3.5-flash-lite`.
+La preparazione degli esami orali universitari costituisce una delle sfide più complesse del percorso accademico. A differenza degli esami scritti o a test, in cui allo studente è richiesto di risolvere esercizi circoscritti o riconoscere risposte corrette tra opzioni prefissate, la prova orale richiede di:
+* Esporre argomenti complessi con linearità logica e padronanza lessicale specialistica.
+* Rispondere tempestivamente a obiezioni, richieste di chiarimento o approfondimenti causali.
+* Dimostrare di aver compreso la gerarchia della materia, collegando nozioni di base a principi operativi avanzati.
 
-The current system uses a Flutter client and a Python FastAPI backend managed with `uv`. FastAPI serves REST endpoints and Pipecat voice sessions. Flutter uses SmallWebRTC for bidirectional audio by default; PCM WebSocket is a selectable fallback. The default voice pipeline is Gemini Live; cascaded STT → LLM → TTS is selectable through configuration.
-
-```text
-Flutter client (lib/)
-  ├─ REST: courses, plans, session status/transcript/control, reports
-  └─ SmallWebRTC audio (default) ─────────┐
-      WebSocket PCM fallback (16 kHz) ─────┤
-                                           ▼
-FastAPI server (backend/src/api.py, port 8000)
-  ├─ /ws, /ws/{course_id}, /ws/test/{course_id}
-  ├─ SmallWebRTC signaling endpoints (/api/offer, /api/session/webrtc)
-  └─ Pipecat pipeline (backend/src/agent.py)
-       ├─ default: Gemini Live (`gemini-3.8-live`, voice `Aoede`)
-       └─ optional: cascaded STT → LLM → TTS
-             │
-             ├─ SessionAssessmentManager / plan-based evaluation / BKT / FSM
-             └─ Per-course graph and vector stores; saved plan and session files
-```
+Attualmente, gli studenti affrontano questo compito affidandosi a metodologie di studio tradizionali o a strumenti informatici di prima generazione:
+1. **Studio Individuale Passivo e Ripetizione a Voce Alta:** Lo studente legge e rilegge i capitoli dei libri di testo, evidenzia passaggi ed elabora riassunti scritti. Successivamente tenta di ripetere a voce alta gli argomenti memorizzati, spesso confrontando la propria esposizione con il testo aperto davanti a sé.
+2. **Strumenti Digitali a Schede Mnemoniche (Flashcard):** Piattaforme basate sulla ripetizione spaziata (quali Anki o SuperMemo) consentono di memorizzare definizioni e associazioni termine-concetto. Tali strumenti operano tipicamente mediante stimolo/risposta testuale sintetico con autovalutazione binaria (ricordato/dimenticato).
+3. **Simulazioni Informali tra Pari (Gruppi di Studio):** Gli studenti si incontrano periodicamente per interrogarsi a vicenda, cercando di replicare la dinamica dell'esame attraverso domande estemporanee formulate dai colleghi di corso.
+4. **Ricevimento Docenti e Tutorato Accademico:** Consultazione occasionale dei professori o dei cultori della materia durante le ore di ricevimento, limitata a chiarimenti puntuali su argomenti specifici.
 
 ---
 
-## 2.2 Main Components and Responsibilities
+## 2.2 Criticità e Problemi del Sistema Attuale
 
-### 2.2.1 Ingestion & Document Processing Subsystem (`src/rag/ingestion/`)
-* **`PdfDocumentParser`:** Extracts raw text, structured tables, and page metadata from PDF documents using `pypdf`.
-* **`TextDocumentParser` / `MarkdownDocumentParser`:** Parses plain text and Markdown course summaries preserving section header hierarchies.
-* **`DocumentChunker`:** Implements token-aware sliding window semantic chunking (default: 400 tokens with 80-token overlap) creating `DocumentChunk` entities.
-* **`ConceptExtractor`:** Uses the configured extraction model (default `gemini-3.5-flash-lite`) with structured output validation to extract `ConceptNode` entities, prerequisite relations, causal chains, and summary definitions directly from text chunks.
-* **`IngestionPipeline`:** Coordinates the end-to-end ingestion lifecycle, persisting chunks to the vector database and ontological triples to the knowledge graph.
+L'analisi dell'attuale modalità di preparazione rivela profonde debolezze sia sul piano cognitivo che su quello dell'efficienza didattica:
 
-### 2.2.2 Knowledge Representation & Hybrid Retrieval Subsystem (`src/rag/`)
-* **`Neo4jGraphStore` & `InMemoryGraphStore`:** Store and query the concept DAG, traversing prerequisite chains, contrasting concepts (`CONTRASTS_WITH`), and downstream implications (`CAUSES`).
-* **`QdrantVectorStore` & `InMemoryVectorStore`:** Index dense semantic embeddings of chunks, executing cosine similarity search filtered by concept IDs.
-* **`HybridRAGRetriever`:** Combines graph neighborhood extraction with vector retrieval to compile rich, bounded `ExaminerContext` payloads containing target concepts, immediate prerequisites, contrasting entities, and verbatim Ground Truth excerpts.
+* **L'Illusione della Competenza (*Illusion of Explanatory Depth*):** Quando uno studente rilegge la dispensa o ripete a voce alta con il testo sott'occhio, il cervello confonde la *capacità di riconoscimento visivo* con la reale *capacità di rievocazione e argomentazione attiva*. Lo studente è convinto di padroneggiare la materia, ma va incontro a blocchi totali nel momento in cui un docente gli pone una domanda aperta senza appunti di supporto.
+* **Mancanza di Feedback Socratico e Approfondimento Causale:** La ripetizione solitaria non offre alcuno stimolo esterno: se lo studente fornisce una spiegazione superficiale, tautologica o priva di nessi di causa-effetto, non c'è nessuno a fargli notare la debolezza logica o a chiedergli *"perché si verifica questo fenomeno?"*.
+* **Incapacità di Riconoscere Misconcezioni Teoriche:** Nelle discipline scientifiche e umanistiche avanzate, molti concetti presentano forti somiglianze terminologiche pur descrivendo proprietà opposte. Nello studio tradizionale, lo studente finisce per confondere tali nozioni senza rendersene conto, scoprendo l'errore concettuale solo in sede d'esame formale.
+* **Limiti Strutturali delle Flashcard Tradizionali:** Le schede digitali premiano la memorizzazione atomica e decontestualizzata. Non incoraggiano la formulazione di periodi verbali articolati né sanno valutare la proprietà di linguaggio o la sicurezza acustica dell'eloquio.
+* **Inefficienza e Asimmetria dei Gruppi di Studio tra Pari:** Le simulazioni con compagni di corso soffrono di problemi di disponibilità oraria, imbarazzo sociale e, soprattutto, asimmetria di preparazione: se il collega che interroga non padroneggia a fondo la disciplina, non sarà in grado di correggere gli errori dell'interrogato né di condurre un colloquio rigoroso.
+* **Assenza di Tracciamento Quantificato delle Lacune Radice:** Al termine di una giornata di ripetizione, lo studente non dispone di alcun quadro oggettivo che gli mostri quali siano i concetti realmente consolidati e quali siano le lacune sui prerequisiti che compromettono la comprensione degli argomenti complessi.
 
-### 2.2.3 Examination Planning Subsystem (`src/planning/`)
-* **`ExaminationPlanner`:** Performs topological sorting on the course knowledge graph to produce an `ExaminationPlan`. For each concept node, it can construct a `PlannedQuestion` containing:
-  * Primary Socratic inquiry (`main_question`).
-  * Guided narrowing probes (`narrowing_questions`).
-  * Scaffolding hints (`scaffolding_hints`).
-  * Application questions (`stress_test_questions`), when supplied by the plan.
-  * Collision-check questions (`collision_check_questions`).
-* **`ExaminationPlan` & `DeferredRetryItem`:** Manages active milestone indexes and a cyclic spaced-repetition queue for deferred concepts.
-
-### 2.2.4 Real-Time Assessment & Pedagogical FSM (`src/assessment/`)
-* **`ResponseEvaluator`:** Compares the transcript with expected key points for the active planned question and applies lexical/stem-based heuristics to classify the response. Treat these labels as heuristic pedagogical signals, not a validated semantic or acoustic measurement.
-* **Turn intent routing:** Before scoring, the evaluator distinguishes relevant clarification questions from clearly unrelated questions/digressions using lexical overlap with the active concept, question, rubric, and retrieved passages. Clarifications are answered briefly from verified context; off-topic turns receive a gentle redirect. Neither path consumes an attempt, changes mastery, or advances the plan. Routed examples are recorded in session events for review. This is a conservative heuristic and may require calibration against actual transcripts.
-* **Examiner guardrails:** `src/prompts/examiner.py` contains the shared examiner policy; `build_examiner_system_instructions` adds course scope and the session greeting, while `build_examiner_turn_prompt` supplies turn-specific evidence and direction. Explicit pause commands are not answers; during pause, speech is ignored until an explicit resume command. Uncertainty does not itself skip a concept. Planned questions allow at least three attempts before offering a clear choice between help and moving on.
-* **`BayesianKnowledgeTracing` (BKT):** Updates latent mastery $P(L_t)$ per concept node using prior $P(L_0)$, learning transit $P(T)$, slip probability $P(S)$, and guess probability $P(G)$, writing dynamic mastery deltas back to the knowledge graph.
-* **`OralExaminerFSM`:** Drives pedagogical state transitions:
-  * `EXPLORATION`: Standard inquiry on scheduled concept.
-  * `CAUSAL_NARROWING`: Probing specific missing mechanisms.
-  * `SCAFFOLDING`: Providing structured hints when the student hesitates or gives partial answers.
-  * `CONCEPTUAL_COLLISION`: Disambiguating confused concepts upon misconception detection.
-  * `PREREQUISITE_FALLBACK`: Testing foundational prerequisite concepts when consecutive failures occur.
-* **`SessionAssessmentManager`:** Orchestrates turn processing, maintains current iteration state, saves and restores session state through the session service, and coordinates pause/resume/restart lifecycles.
-* **`SessionReportGenerator`:** Generates comprehensive post-exam diagnostic reports, root-cause analysis (identifying foundational prerequisite blockers), and longitudinal comparison metrics across multi-iteration retakes ($\Delta\text{Mastery}$, recovered concepts, persistent weak spots).
-* **`SessionService`:** Encapsulates the entire assessment management layer into a clean programmatic API callable by CLIs, background workers, or future web/REST backends.
-
-### 2.2.5 Pipecat Voice Agent & Audio Transport (`src/agent.py`)
-* **Pipecat pipeline:** Built and started by FastAPI for each voice session; the session uses the active course plan and assessment context.
-* **Transports:** Flutter uses SmallWebRTC peer audio by default through `/api/offer` (also `/api/session/webrtc`) and trickle-ICE patches on `/api/offer`. The bidirectional PCM WebSocket endpoints remain available as fallback.
-* **Pipeline modes:** `gemini_live` (default) selects Gemini Live; `cascaded` optionally composes STT, LLM, and TTS services. WebSocket fallback input is mono PCM S16LE at 16 kHz and Gemini Live output is mono PCM at 24 kHz. WebRTC negotiates media through libwebrtc and uses the transport's codec/sample handling. Interruption clears queued playback.
-* **Android audio route:** Flutter WebRTC requests mono capture with echo cancellation, noise suppression, and auto gain control. It disables hardware audio processing and requests a 48 kHz device rate. The current Android configuration keeps `MODE_IN_COMMUNICATION` for full-duplex microphone capture/routing while setting output `AudioAttributes` to `USAGE_MEDIA` / `CONTENT_TYPE_MUSIC`; it does not switch the microphone into a playback-only mode.
-
-### 2.2.6 Terminal CLI Console (`src/session_cli.py`)
-* Dedicated command-line interface supporting commands: `status`, `pause`, `resume`, `repeat`, `history`, `compare`, `report`, and `transcript` (with full markdown export capability).
+Questa marcata discrepanza tra le modalità di studio disponibili e le reali esigenze valutative dell'università evidenzia l'urgente necessità di un sistema capace di agire come un vero docente virtuale socratico.
 
 ---
 
-## 2.3 Data Storage & Persistence Architecture
+# 3. Sistema Proposto
 
-Per-course graph/vector stores are shared within the backend process. The default embedding provider is `mock`; Neo4j and Qdrant can be configured, but their use and persistence depend on deployment. Saved course materials and plans can be used to rebuild in-memory stores after restart.
+## 3.1 Panoramica Funzionale del Sistema
 
-| Storage Medium | Technology / Implementation | Scope & Entity Stored | Persistence Model |
-| :--- | :--- | :--- | :--- |
-| **Knowledge Graph** | Neo4j (optional) or `InMemoryGraphStore` | `ConceptNode` entities, ontological relationships (`REQUIRES`, `CAUSES`, `CONTRASTS_WITH`), dynamic node mastery scores ($P(L_t)$). | ACID disk persistence via Neo4j Bolt protocol. |
-| **Vector Database** | Qdrant (optional) or `InMemoryVectorStore` | `DocumentChunk` dense vector embeddings (384/768/1536-dim) with metadata payloads. | Persistent collections on disk/cloud with HNSW indexing. |
-| **Session State** | `session_state.json` (via Pydantic & JSON) | Active student ID, session status (`ACTIVE`, `PAUSED`, `COMPLETED`), current iteration, active concept ID, FSM state, turn history, archived iterations history, examination plan snapshots. | JSON-backed session state; persistence guarantees depend on the save path and lifecycle operation. |
-| **Exam Plan** | `examination_plan.json` (via Pydantic) | Pre-computed `ExaminationPlan`, topological concept ordering, question blueprints, and deferred queue status. | Saved JSON plan used to initialize or rebuild the course context. |
+RetainMind ridefinisce radicalmente la preparazione agli esami orali introducendo un'infrastruttura intelligente in cui l'intelligenza artificiale opera non come un semplice generatore di risposte, ma come un **docente universitario virtuale rigoroso, empatico e metodologicamente fondato**.
 
----
-
-## 2.4 Component Communication & Data Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Student as 🎓 Flutter client
-    participant Agent as 🎙️ Pipecat pipeline (`agent.py`)
-    participant Gemini as 🧠 Gemini Multimodal Live API
-    participant Manager as ⚙️ SessionAssessmentManager
-    participant Eval as 🔍 ResponseEvaluator
-    participant BKT as 📊 BKT Engine
-    participant Graph as 🕸️ Neo4j / InMemoryGraph
-    participant Disk as 💾 session_state.json
-
-    Student->>Agent: WebRTC audio (default) / PCM WebSocket fallback
-    Agent->>Gemini: Audio frames / text frames
-    Agent->>Manager: process_student_turn(transcript, pause_duration)
-    Manager->>Eval: evaluate_response(transcript, target_concept, GroundTruth)
-    Eval-->>Manager: evaluation result and expected key-point coverage
-    Manager->>BKT: update_concept_mastery(concept_id, result)
-    BKT->>Graph: Update ConceptNode mastery_score
-    Manager->>Manager: Advance FSM / Plan Queue & Build PedagogicalDirective
-    Manager->>Disk: save_session_state()
-    Manager-->>Agent: ExaminerContext + Spoken Directive
-    Agent->>Gemini: Context and plan-based directive
-    Gemini-->>Student: Audio response over configured transport
-```
-
----
-
-# 3. Proposed System
-
-## 3.1 Overview & Architectural Evolution
-
-The RetainMind project originated from the concept outlined in `RetainMind_Technical_RAG_Specification.md`, which proposed a custom Rust FFI mobile audio engine, a Rust Tokio WebSocket gateway, and a mobile-driven lock-screen micro-interrogation model.
-
-The implemented architecture is a Flutter client with a unified FastAPI/Pipecat backend. Flutter uses SmallWebRTC media by default; WebSocket PCM is the fallback. The default speech path is Gemini Live; cascaded STT → LLM → TTS is optional.
-
-### Evolution Summary Table:
-
-| Subsystem | Original Specification (`Technical_RAG_Specification.md`) | Current & Proposed System (`RetainMind_RAD.md`) | Rationale for Evolution |
-| :--- | :--- | :--- | :--- |
-| **Voice Transport & Gateway** | Custom Rust Tokio WebSocket server parsing raw Opus & Protobuf. | FastAPI-managed Pipecat SmallWebRTC media for Flutter; PCM WebSocket fallback. | Pipecat handles WebRTC media while retaining a simpler PCM path for fallback and diagnostics. |
-| **Speech Pipeline** | Dual-vendor hypothesis (OpenAI Realtime vs. Gemini Live) + unproven cascade. | Gemini Live is the default; cascaded STT → LLM → TTS is optional. | The pipeline mode is configurable; latency and audio quality must be measured per device and provider. |
-| **Assessment & Memory Retention** | Modified classical spaced repetition (v-SM2 / FSRS-4.5) formula. | **Bayesian Knowledge Tracing (BKT)** + **Ontological Pedagogical FSM** + **Cyclic Deferred Queue**. | BKT models latent mastery probabilities per concept mathematically, enabling real-time multi-hop root-cause diagnosis of prerequisite gaps rather than static flashcard scheduling. |
-| **Session Control & Interfaces** | Limited to mobile app interface. | Flutter app, FastAPI REST endpoints, and `SessionService`. | Connects course, plan, session, transcript, and report workflows to the mobile client. |
-
----
-
-## 3.2 Functional Requirements
-
-```
-                               ┌─────────────────────────┐
-                               │  INGESTION & EXTRACTION │
-                               │  FR-001, FR-002, FR-003 │
-                               └────────────┬────────────┘
-                                            │
-                                            ▼
-                               ┌─────────────────────────┐
-                               │  EXAMINATION PLANNING   │
-                               │  FR-004, FR-005         │
-                               └────────────┬────────────┘
-                                            │
-                                            ▼
-                               ┌─────────────────────────┐
-                               │  REAL-TIME VOICE S2S    │
-                               │  FR-006, FR-007, FR-008 │
-                               └────────────┬────────────┘
-                                            │
-                                            ▼
-                               ┌─────────────────────────┐
-                               │  EVALUATION & TRACING   │
-                               │  FR-009, FR-010, FR-011 │
-                               └────────────┬────────────┘
-                                            │
-                                            ▼
-                               ┌─────────────────────────┐
-                               │  LIFECYCLE & ANALYTICS  │
-                               │  FR-012, FR-013, FR-014,│
-                               │  FR-015, FR-016         │
-                               └─────────────────────────┘
-```
-
-### 3.2.1 Ingestion & Knowledge Construction Requirements
-
-* **FR-001: Multi-Format Document Ingestion**
-  * *Description:* The system shall ingest PDF, Markdown, and plain text files, extracting structural content and headers.
-  * *Preconditions:* File must be a valid, readable `.pdf`, `.md`, or `.txt` document.
-  * *Main Behavior:* Extracts text from supported PDF or text formats, then creates bounded `DocumentChunk` elements with metadata.
-  * *Expected Result:* Indexed text chunks stored in vector store ready for embedding.
-  * *Dependencies:* `pypdf` and the configured extraction model.
-
-* **FR-002: Ontological Concept & Relationship Extraction**
-  * *Description:* The system shall extract concepts, summaries, expected key points, and supported prerequisite/causal relationships.
-  * *Preconditions:* Chunked document text must be available.
-  * *Main Behavior:* Invokes the configured structured extraction model (default `gemini-3.5-flash-lite`) to create concept and relation data for the graph store.
-  * *Expected Result:* Connected topological concept graph instantiated.
-  * *Dependencies:* `ConceptExtractor`, `BaseGraphStore`.
-
-* **FR-003: Hybrid Vector & Graph Indexing**
-  * *Description:* The system shall generate dense vector embeddings for text chunks and link them bidirectionally to corresponding concept nodes in the graph database.
-  * *Preconditions:* Valid API keys for embedding generation.
-  * *Main Behavior:* Uses the configured embedding provider (default `mock`) and stores vectors in the configured vector store when available.
-  * *Expected Result:* Hybrid retrieval combines available vector matches with graph context; no latency target is asserted here.
-  * *Dependencies:* `QdrantVectorStore`, `BaseVectorStore`.
-
-### 3.2.2 Examination Planning Requirements
-
-For topic-based plan generation, the Flutter flow offers `base`, `intermedio`, or `avanzato` and a duration from 10 to 60 minutes. The default plan-generation model is `gemini-3.5-flash-lite` (`PLAN_GENERATION_MODEL`). The generated handout and topic list are shown for review before the exam starts.
-
-
-* **FR-004: Topological Examination Plan Generation**
-  * *Description:* The system shall compute a structured `ExaminationPlan` by performing a topological sort on the concept DAG, ordering questions from foundational prerequisites to advanced synthesis topics.
-  * *Preconditions:* Knowledge graph must contain at least one valid `ConceptNode`.
-  * *Main Behavior:* `ExaminationPlanner` orders prerequisite dependencies and generates planned questions with expected key points and available follow-up prompts; cyclic dependencies are reported and handled by planner fallback behavior.
-  * *Expected Result:* Serialized `examination_plan.json` generated on disk.
-  * *Dependencies:* `ExaminationPlanner`, `BaseGraphStore`.
-
-* **FR-005: Cyclic Spaced-Repetition Deferral**
-  * *Description:* The assessment flow may defer a concept for later review according to the active plan and session state.
-  * *Preconditions:* Active `ExaminationPlan` with student error or skip request.
-  * *Main Behavior:* Marks item status as `DEFERRED`; on subsequent correct answers, increments retry counter and pops ready items back to `IN_PROGRESS`.
-  * *Expected Result:* Dynamic, adaptive interrogation flow without permanent failure bottlenecks.
-  * *Dependencies:* `ExaminationPlan`, `DeferredRetryItem`.
-
-### 3.2.3 Real-Time Voice & Dialogue Requirements
-
-* **FR-006: Bidirectional Speech-to-Speech Interrogation**
-  * *Description:* The system shall conduct oral examination sessions through Pipecat over Flutter SmallWebRTC by default, with WebSocket PCM as a fallback. Plans generated from a topic accept a level and duration, and the app presents generated material for review before starting.
-  * *Preconditions:* The selected Pipecat transport is connected and provider credentials for the configured pipeline are available.
-  * *Main Behavior:* Streams microphone audio to the selected pipeline and returns examiner audio to the client.
-  * *Expected Result:* Spoken dialogue over the selected transport; latency depends on pipeline, provider, and network.
-  * *Dependencies:* Pipecat and the provider configured for the selected pipeline.
-
-* **FR-007: Optional Cascaded Voice Pipeline**
-  * *Description:* The system shall also support a configurable sequential STT → LLM → TTS pipeline when `AGENT_PIPELINE_MODE=cascaded`.
-  * *Preconditions:* `AGENT_PIPELINE_MODE=cascaded` and corresponding API keys provided.
-  * *Main Behavior:* Transcribes incoming audio, executes Socratic prompt reasoning, and synthesizes audio stream.
-  * *Expected Result:* Voice sessions can use the configured cascaded providers as an alternative to the default Gemini Live mode.
-  * *Dependencies:* Pipecat and credentials for the configured STT, LLM, and TTS providers.
-
-* **FR-008: Real-Time Soft Barge-in & Interruption Handling**
-  * *Description:* The system shall instantly halt AI voice playback when student speech is detected, preventing conversational collisions.
-  * *Preconditions:* Student speaks while examiner audio is playing.
-  * *Main Behavior:* The pipeline handles interruption events and Flutter clears queued playback using the `clear` audio event; exact turn timing depends on the configured pipeline.
-  * *Expected Result:* Natural human-like conversational turn-taking.
-  * *Dependencies:* Pipecat transport and client playback queue.
-
-* **FR-016: Control, Clarification & Off-Topic Routing**
-  * *Description:* The system shall distinguish an exam answer from pause/resume commands, relevant clarification questions, and clearly unrelated digressions.
-  * *Main Behavior:* Pause and resume are explicit controls. A topical clarification is answered briefly from verified course context without score or attempt updates. An off-topic utterance is redirected to the active question without advancing the plan. A vague "non so" does not itself skip an item; after at least three attempts, the examiner asks whether to offer help or move on.
-  * *Diagnostics:* Routed turns are recorded as session events with their intent and transcript, and are excluded from answer history and mastery updates.
-
-### 3.2.4 Assessment & Knowledge Tracing Requirements
-
-* **FR-009: Multi-Faceted Answer Evaluation**
-  * *Description:* The system shall compare the transcript with expected key points for the active question and classify the answer using the current heuristic evaluator.
-  * *Preconditions:* Student transcript and active concept context available.
-  * *Main Behavior:* `ResponseEvaluator` applies lexical/stem matching and returns an outcome used by the assessment manager; this is a heuristic, not a validated semantic score.
-  * *Expected Result:* Rich `EvaluationDetail` object generated with actionable diagnostic feedback.
-  * *Dependencies:* `ResponseEvaluator`.
-
-* **FR-010: Dynamic Scaffolding & Targeted Probing**
-  * *Description:* When the evaluation indicates an incomplete answer, the system should use the plan and available expected key points to select a suitable follow-up question.
-  * *Preconditions:* Non-accurate evaluation outcome.
-  * *Main Behavior:* `SessionAssessmentManager` formats dynamic directive injected into examiner context.
-  * *Expected Result:* Examiner asks context-specific follow-ups that vary depending on the exact content uttered in that specific turn.
-  * *Dependencies:* `SessionAssessmentManager`, `ExaminerContext`.
-
-* **FR-011: Bayesian Knowledge Tracing (BKT) Mastery Updates**
-  * *Description:* The system shall update the BKT mastery estimate for the active concept after evaluation.
-  * *Preconditions:* Valid evaluation result and concept node ID.
-  * *Main Behavior:* `BayesianKnowledgeTracing` executes BKT mathematical update; adjusts node `mastery_score` between $0.0$ and $1.0$.
-  * *Expected Result:* Real-time, quantitative mastery tracking across the knowledge graph.
-  * *Dependencies:* `BayesianKnowledgeTracing`, `BaseGraphStore`.
-
-### 3.2.5 Session Management & Analytics Requirements
-
-* **FR-012: Continuous Atomic State Persistence**
-  * *Description:* The system shall save session state through the existing session lifecycle APIs and restore it where corresponding state files are available.
-  * *Preconditions:* Active session in progress.
-  * *Main Behavior:* Serializes `SessionAssessmentManager` state to JSON synchronously.
-  * *Expected Result:* Session recovery from saved state when available; recovery after arbitrary crashes is not guaranteed.
-  * *Dependencies:* `SessionAssessmentManager` and session persistence implementation.
-
-* **FR-013: Spoken & Programmatic Session Pause & Resume**
-  * *Description:* The system shall expose pause and resume controls through supported REST operations.
-  * *Preconditions:* Ongoing or paused examination session.
-  * *Main Behavior:* Updates session status and saved state where supported; resumption depends on available session and course data.
-  * *Expected Result:* Session can be paused and resumed using the available lifecycle operations.
-  * *Dependencies:* `SessionAssessmentManager`, `SessionService`.
-
-* **FR-014: Adaptive Multi-Iteration Retakes & Longitudinal Comparison**
-  * *Description:* Where implemented, the system shall support session history and iteration comparisons through the assessment service.
-  * *Preconditions:* At least one completed or partial iteration.
-  * *Main Behavior:* Archives prior iteration history; constructs comparison report via `SessionReportGenerator.compare_iterations`.
-  * *Expected Result:* Spoken and numerical comparative feedback tracking student improvement over time.
-  * *Dependencies:* `SessionReportGenerator`, `SessionAssessmentManager`.
-
-* **FR-015: Complete Dialogue Transcript Navigation & Export**
-  * *Description:* The system shall expose available session transcript and history through the API and session service.
-  * *Preconditions:* Session history populated with at least one exchange.
-  * *Main Behavior:* The API returns transcript/history data for the app and other clients.
-  * *Expected Result:* Full visibility and navigability into everything uttered during oral examinations.
-  * *Dependencies:* `SessionService`, `session_cli.py`.
-
----
-
-## 3.3 Nonfunctional Requirements
-
-### 3.3.1 Usability
-* **NFR-U-01 (Natural Spoken Socratic Protocol):** The AI examiner shall maintain natural Italian conversational prosody, concise vocal turns (2–3 sentences maximum), and professional academic demeanor without robotic stilted phrasing or lecturing monologues.
-* **NFR-U-02 (Hands-Free Voice Interaction):** In active voice mode, spoken responses are supported; lifecycle controls are also available through the app and REST endpoints.
-* **NFR-U-03 (Intuitive Terminal Navigation):** The CLI console (`session_cli.py`) shall provide color-coded, self-explanatory banners and ASCII status indicators for developer inspection.
-
-### 3.3.2 Reliability & Fault Tolerance
-* **NFR-R-01 (Session Recovery):** Session state should be saved at lifecycle checkpoints and recoverable from available files; atomic crash-safe persistence is a future reliability objective.
-* **NFR-R-02 (Graceful Exception Containment):** If an external tool call or evaluation fails due to an API timeout, the agent shall fall back to generic pedagogical continuity prompts while preserving the active Pipecat session when possible.
-* **NFR-R-03 (Fallback Storage Availability):** When Neo4j or Qdrant database servers are unreachable, the system shall seamlessly fall back to `in-memory graph and vector stores when supported by the active configuration.
-
-### 3.3.3 Performance
-* **NFR-P-01 (Voice Turnaround Latency Target):** Measure end-to-end latency from end of student speech to examiner playback for each configured pipeline and supported device; no numeric target is asserted until benchmarked.
-* **NFR-P-02 (Local Evaluation Turn Duration):** Local plan-based evaluation, BKT updating, and context assembly should remain responsive; establish numeric targets through profiling.
-* **NFR-P-03 (Document Ingestion Throughput):** Measure ingestion time across document sizes and configured providers before setting throughput targets.
-
-### 3.3.4 Supportability & Diagnostics
-* **NFR-S-01 (Structured Diagnostic Logging):** Diagnostic logging should provide useful pipeline, session, and evaluation information while avoiding unnecessary exposure of student data.
-* **NFR-S-02 (Automated Testability):** Backend behavior should be covered by focused unit and integration tests that do not require live provider credentials for ordinary runs.
-* **NFR-S-03 (Linter & Formatting Conformance):** Python code should follow the Ruff formatting and linting configuration where applicable.
-
-### 3.3.5 Implementation Constraints
-* **NFR-I-01 (Python Modern Ecosystem):** The backend is implemented in Python and managed with `uv`; requirements should match the versions pinned by the project.
-* **NFR-I-02 (Pipecat Integration):** Voice processing shall use the Pipecat pipeline created by the FastAPI application; `src/api.py` is the server entrypoint and `src/agent.py` builds the pipeline.
-
-### 3.3.6 Interface Specifications
-* **NFR-IF-01 (Audio Interface):** Flutter uses SmallWebRTC media by default; WebSocket fallback uses mono PCM S16LE at 16 kHz input and 24 kHz Gemini Live output. Android WebRTC requests echo cancellation, noise suppression, auto gain control, and 48 kHz device audio; output attributes use media/music while capture stays in `MODE_IN_COMMUNICATION`.
-* **NFR-IF-02 (Service Interface):** FastAPI REST endpoints, SmallWebRTC offer/ICE signaling, and WebSocket PCM fallback provide the Flutter-facing service interfaces.
-
-### 3.3.7 Packaging & Deployment
-* **NFR-PKG-01 (Containerized Deployment):** The backend can be started locally with `./start_api_server.sh`, which runs the unified FastAPI/Pipecat application.
-* **NFR-PKG-02 (Environment Isolation):** Dual configuration resolution supporting `.env.local` (local overrides) and `.env` (global defaults).
-
-### 3.3.8 Legal, Privacy & Compliance
-* **NFR-L-01 (Ephemeral Voice Processing):** Audio and transcript retention depends on the selected provider and application logging/persistence configuration; document the deployed data path before making retention guarantees.
-* **NFR-L-02 (GDPR / Data Sovereignty):** All user data, graph nodes, and conversation transcripts must reside locally or in user-designated sovereign cloud endpoints.
-
----
-
-## 3.4 System Models
-
-### 3.4.1 Scenarios
-
-#### Scenario 1: User Uploads a Study Document & Generates Plan
-* **Actors:** Student, Ingestion Subsystem (`ingest.py`).
-* **Preconditions:** Student provides a valid course document (`materials/database_systems.pdf`).
-* **Main Flow:**
-  1. Student selects an existing course or submits a topic through the Flutter app.
-  2. For a topic, student selects level (`base`, `intermedio`, `avanzato`) and duration (10–60 minutes).
-  3. FastAPI extracts concepts and prepares course material and an examination plan using the configured generation model.
-  4. Flutter displays the generated handout and concepts for review.
-  5. Student confirms the material and starts the voice session.
-* **Alternative Flow (Uploaded Material):** Student uploads supported course documents; extracted text is used to construct the plan. Scanned documents may require OCR preprocessing before upload.
-* **Expected Outcome:** A reviewed course plan is available to the Pipecat voice session.
-
-#### Scenario 2: Standard Oral Examination & Real-Time Scaffolding
-* **Actors:** Student, Oral Examiner Agent.
-* **Preconditions:** `examination_plan.json` exists; Pipecat session available through the configured transport.
-* **Main Flow:**
-  1. The Flutter app opens a Pipecat audio session; the agent sends an opening greeting when the session is ready.
-  2. Student responds to the opening greeting.
-  3. Agent launches first planned question: *"Quali sono le caratteristiche fondamentali di un RDBMS?"*
-  4. Student answers partially: *"I database relazionali memorizzano dati in tabelle con righe e colonne."*
-  5. `ResponseEvaluator` compares the transcript with the planned expected key points using lexical and stem matching.
-  6. Evaluator returns a heuristic response category; the assessment manager updates the BKT estimate.
-  7. `SessionAssessmentManager` updates BKT state and uses the plan to guide the follow-up.
-  8. Agent asks a follow-up based on the active plan and expected key points.
-  9. Student provides complete explanation; Evaluator returns a response category and the assessment manager updates progress.
-  10. System advances according to the active examination plan.
-* **Expected Outcome:** Progress and follow-up selection are driven by the plan and assessment result.
-
-#### Scenario 3: Mid-Exam Pause & Seamless Resumption
-* **Actors:** Student, Oral Examiner Agent, Session CLI.
-* **Preconditions:** Active exam at concept milestone 3/10.
-* **Main Flow:**
-  1. Student or app requests a pause through an available lifecycle control.
-  2. FastAPI updates the session through the assessment service and returns the operation result.
-  3. Student disconnects.
-  4. Later, the student reconnects and requests resume.
-  5. The service restores session state where available and continues with the active course plan.
-* **Alternative Flow:** Session status and lifecycle controls are available through the API routes documented in `backend/README.md`.
-* **Expected Outcome:** Resume from available saved state; exact recovery depends on the persisted data.
-
----
-
-### 3.4.2 Use Case Model
+L'architettura del sistema si fonda su un modello client-server reattivo:
+* Il **Client Mobile** offre allo studente un ambiente pulito per importare i materiali didattici, visualizzare la scaletta della materia e sostenere la prova orale a mani libere con streaming audio a bassissima latenza.
+* Il **Server Applicativo e Backend Pedagogico** orchestra l'elaborazione dei documenti, la costruzione della base di conoscenza, la pianificazione didattica, la conduzione del colloquio vocale e l'analisi probabilistica della conoscenza.
 
 ```mermaid
 flowchart TB
-    Student((🎓 Student))
-    Admin((🛠️ Developer / CLI))
-
-    subgraph RetainMind_System [RetainMind Oral Study Assistant]
-        UC1[Ingest Course Document]
-        UC2[Generate Topological Exam Plan]
-        UC3[Conduct Real-Time Oral Exam]
-        UC4[Evaluate Spoken Response]
-        UC5[Apply Socratic Scaffolding]
-        UC6[Track Bayesian Mastery BKT]
-        UC7[Pause / Resume Session]
-        UC8[Repeat Exam with Adaptation]
-        UC9[Inspect RCA & Diagnostic Report]
-        UC10[Browse / Export Transcript]
+    subgraph ClientLayer ["📱 CLIENT MOBILE — STUDENTE"]
+        UI["Interfaccia Utente Mobile
+(Gestione Corsi, Scalette & Report)"]
+        AudioClient["Streaming Audio WebRTC Full-Duplex
+(Cancellazione Riverbero & Barge-in)"]
+        Controls["Console di Controllo
+(Pausa, Ripresa, Ripetizione, Salto)"]
     end
 
+    subgraph ServerGateway ["🌐 SERVER APPLICATIVO & GATEWAY MULTIMEDIALE"]
+        REST["Servizi Web REST
+(Gestione Corsi, Piani & Autenticazione)"]
+        Signaling["Gateway di Segnalazione WebRTC
+(Negoziazione SDP & Scambio ICE)"]
+        Lifecycle["Coordinamento Ciclo di Vita Sessione
+(Persistenza Sincrona & Ripristino)"]
+    end
+
+    subgraph VoiceEngine ["🎙️ PIPELINE VOCALE CONVERSAZIONALE"]
+        GeminiLive["Modello Multimodale Vocale Nativo
+(Comprensione Diretta & Voce Espressiva)"]
+        Cascaded["Pipeline Alternativa a Cascata
+(STT → LLM → TTS)"]
+        VAD["Rilevamento Attivita Vocale (VAD)
+& Instradamento Intelligente Turni"]
+    end
+
+    subgraph PedagogicalEngine ["🧠 MOTORE DI VALUTAZIONE & BKT"]
+        Evaluator["Valutatore Diagnostico dei Turni
+(Confronto Punti Chiave & Analisi Esitazioni)"]
+        BKT["Bayesian Knowledge Tracing (BKT)
+(Stima Continua Padronanza Latente)"]
+        FSM["Macchina a Stati Finiti (FSM)
+(Strategia Didattica & Scaffolding)"]
+        RCA["Analisi Cause Radice (RCA)
+(Diagnosi Propedeuticita & Coda Rinvio)"]
+    end
+
+    subgraph StorageLayer ["💾 ARCHIVI DELLA CONOSCENZA & PERSISTENZA"]
+        GraphStore["Grafo della Conoscenza Ontologico
+(Prerequisiti, Contrasti & Implicazioni)"]
+        VectorStore["Indice Vettoriale Semantico
+(Recupero Ground Truth da Materiali)"]
+        PlanStore["Struttura del Piano d'Esame
+(Scaletta Topologica & Blueprint Domande)"]
+        StateStore["Memoria di Sessione Persistente
+(Salvataggio Atomico Turn-by-Turn)"]
+    end
+
+    ClientLayer <--> ServerGateway
+    ServerGateway <--> VoiceEngine
+    VoiceEngine <--> PedagogicalEngine
+    PedagogicalEngine <--> StorageLayer
+```
+
+### Funzionamento Dettagliato del Backend Passo dopo Passo
+
+L'intero ciclo di elaborazione del backend si articola in una sequenza continua di undici passaggi operativi:
+
+#### 1. Ingestion dei Documenti Didattici e Segmentazione Semantica
+Lo studente carica i propri testi di studio (libri di testo, slide, dispense o riassunti). Il backend ne riconosce la struttura, bonifica il testo preservando la gerarchia dei capitoli ed esegue una segmentazione semantica (*chunking*) a finestra scorrevole: ogni frammento racchiude un pensiero logico completo ed è provvisto di sovrapposizione concettuale con i frammenti adiacenti, garantendo che le informazioni rimangano integre.
+
+#### 2. Estrazione Ontologica e Costruzione del Grafo della Conoscenza
+Un modello linguistico specializzato analizza i frammenti informativi ed estrae la rete ontologica della materia:
+* *Nodi Concettuali:* Ogni nozione cardine del corso viene formalizzata con nome accademico, sintesi teorica rigorosa e grado di astrazione.
+* *Relazioni Ontologiche Tipizzate:* Vengono tracciati archi orientati di prerequisito logico (`REQUIRES`), implicazione causale (`CAUSES`), contrasto concettuale o confondibilità (`CONTRASTS_WITH`) e approfondimento specialistico (`EXPANDS`). La rete risultante viene salvata nel grafo della conoscenza del corso.
+
+#### 3. Indicizzazione Vettoriale e Base di Conoscenza Ibrida (GraphRAG)
+Ogni frammento testuale originario viene convertito in un vettore denso e archiviato nell'indice vettoriale. Ogni nodo concettuale del grafo viene collegato ai passaggi esatti del testo da cui è stato distillato (*Ground Truth*). Durante l'esame, il sistema unisce l'esplorazione topologica del grafo alla ricerca per similarità semantica, assicurando che le domande e le valutazioni siano blindate contro qualsiasi allucinazione.
+
+#### 4. Pianificazione Didattica Topologica dell'Esame
+Il backend genera in anticipo una scaletta d'esame strutturata applicando un ordinamento topologico sul grafo delle propedeuticità concettuali:
+* I principi introduttivi e le definizioni di base vengono affrontati per primi.
+* I meccanismi applicativi intermedi occupano la fase centrale.
+* I temi complessi di sintesi avanzata vengono proposti solo dopo aver accertato la comprensione delle basi.
+Per ogni argomento, il sistema pre-calcola una scheda didattica completa contenente: domanda principale aperta, risposta ideale, punti chiave irrinunciabili, sotto-domande di approfondimento causale, indizi graduali di aiuto (*scaffolding*), verifiche per risposte recitate a memoria e controlli di collisione concettuale.
+
+#### 5. Negoziazione Multimediale e Apertura dell'Aula Vocale
+All'avvio dell'esame da parte dello studente, il client e il server negoziano una connessione audio bidirezionale a bassa latenza su protocollo WebRTC. Viene inizializzata la pipeline conversazionale e l'esaminatore sintetico porge vocalmente un saluto introduttivo, enunciando il programma e ponendo la prima domanda aperta prevista dalla scaletta.
+
+#### 6. Rilevamento della Voce (VAD), Interruzioni (Barge-in) e Instradamento dei Turni
+Durante il dialogo, il sistema rileva con precisione l'attività vocale dello studente e ne rispetta le pause riflessive naturali. Se lo studente parla mentre l'esaminatore sta parlando, la sintesi vocale si interrompe all'istante (*barge-in*). Prima di valutare l'intervento, un modulo di instradamento intelligente classifica l'intento:
+* I comandi operativi (*"Pausa"*, *"Riprendiamo"*, *"Salta"*) vengono eseguiti senza intaccare i punteggi né consumare tentativi.
+* Le richieste di chiarimento didattico (*"Cosa intendi con questa parola?"*) ricevono una delucidazione concisa senza penalità.
+* Le digressioni fuori tema vengono riorientate con garbo verso l'argomento attivo.
+* Le risposte d'esame sostanziali vengono immediatamente inoltrate alla valutazione diagnostica.
+
+#### 7. Valutazione Diagnostica Sfaccettata della Risposta
+La trascrizione dell'intervento viene analizzata rispetto ai punti chiave attesi, misurando la presenza dei concetti irrinunciabili, la proprietà lessicale e i segnali acustico-temporali di incertezza (durata delle pause iniziali, densità di intercalari). Il turno viene classificato in una categoria diagnostica rigorosa: `ACCURATE` (completa e sicura), `PARTIAL` (corretta ma incompleta), `VAGUE` (superficiale o tautologica), `HESITANT` (corretta ma incerta ed esitante), `MISCONCEPTION` (confusione con un'altra nozione teorica) o `MEMORIZED` (ripetizione letterale mnemonica).
+
+#### 8. Tracciamento Probabilistico della Padronanza Cognitiva (BKT)
+L'esito diagnostico aggiorna la stima della padronanza latente $P(L_t) \in [0.0, 1.0]$ attraverso il modello di Bayesian Knowledge Tracing. Il modello calcola matematicamente la competenza reale ponderando le risposte su due parametri cognitivi: la probabilità di compiere uno scivolone accidentale (*slip*) e la probabilità di indovinare casualmente (*guess*). Inoltre, collegando il BKT al grafo ontologico, l'algoritmo di Root Cause Analysis (RCA) deduce se una difficoltà su un tema avanzato scaturisce dalla mancata assimilazione di un prerequisito fondamentale a monte.
+
+#### 9. Scelte Pedagogiche della Macchina a Stati Finiti (FSM) e Direttive Vocali
+In base alla nuova stima di competenza, una Macchina a Stati Finiti pedagogica stabilisce la mossa successiva:
+* `EXPLORATION`: Convalida la risposta positiva e avanza al nuovo argomento in programma.
+* `CAUSAL_NARROWING`: Pone una domanda mirata per far emergere i nessi logici di causa-effetto omessi.
+* `SCAFFOLDING`: Offre un indizio progressivo per guidare lo studente esitante alla formulazione autonoma.
+* `CONCEPTUAL_COLLISION`: Disambigua una misconcezione chiedendo di chiarire le differenze rispetto alla nozione opposta.
+* `PREREQUISITE_FALLBACK`: Sospende temporaneamente il concetto complesso dopo ripetuti fallimenti e ripiega sul prerequisito debole per risanare le basi.
+La direttiva didattica viene inviata alla pipeline vocale, che la pronuncia con tono naturale ed empatico.
+
+#### 10. Amministrazione della Coda di Recupero Ciclica
+I concetti non superati o temporaneamente sospesi non vengono scartati, ma confluiscono in una coda di recupero ciclica. Prima di dichiarare conclusa la sessione, l'esaminatore ripropone ordinatamente questi argomenti, offrendo allo studente la possibilità di riscattarsi grazie alle spiegazioni e ai chiarimenti maturati nel corso della discussione.
+
+#### 11. Conservazione Atomica della Memoria di Sessione e Verbale Finale
+A ogni singolo scambio verbale, l'intero stato della prova (trascrizioni, valutazioni, stime BKT, stato FSM e coda di recupero) viene registrato in modo atomico e persistente. Al termine del colloquio, il sistema redige un verbale diagnostico dettagliato che evidenzia i punti di forza, le aree di fragilità teorica, le misconcezioni rilevate e le indicazioni causali RCA, corredate da confronti longitudinali con le simulazioni d'esame precedenti.
+
+---
+
+## 3.2 Requisiti Funzionali
+
+```mermaid
+flowchart LR
+    A["📚 INGESTION & CONOSCENZA
+(FR-001, FR-002, FR-003)"] --> B["📋 PIANIFICAZIONE ESAME
+(FR-004, FR-005)"]
+    B --> C["🎙️ DIALOGO VOCALE TEMPO REALE
+(FR-006, FR-007, FR-008)"]
+    C --> D["🧠 VALUTAZIONE & BKT
+(FR-009, FR-010, FR-011)"]
+    D --> E["📊 SESSIONE & ANALITICA
+(FR-012, FR-013, FR-014, FR-015, FR-016)"]
+
+    style A fill:#EBF5FB,stroke:#54A2C3,stroke-width:2px,color:#1F4E79
+    style B fill:#EBF5FB,stroke:#54A2C3,stroke-width:2px,color:#1F4E79
+    style C fill:#EBF5FB,stroke:#54A2C3,stroke-width:2px,color:#1F4E79
+    style D fill:#EBF5FB,stroke:#54A2C3,stroke-width:2px,color:#1F4E79
+    style E fill:#EBF5FB,stroke:#54A2C3,stroke-width:2px,color:#1F4E79
+```
+
+### 3.2.1 Ingestion e Costruzione della Conoscenza
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **FR-001** | Ingestion Documentale Multi-Formato | Il sistema deve effettuare l'ingestion di file PDF, Markdown e testo semplice, estraendo contenuti strutturati, intestazioni e chunk testuali delimitati con metadati per l'indicizzazione. |
+| **FR-002** | Estrazione Ontologica di Concetti e Relazioni | Il sistema deve estrarre concetti e relazioni dai materiali didattici analizzati, producendo entità concettuali connesse da relazioni semantiche tipizzate (`REQUIRES`, `CAUSES`, `CONTRASTS_WITH`, `EXPANDS`) nel grafo della conoscenza. |
+| **FR-003** | Indicizzazione Vettoriale Ibrida e Retrieval Ground Truth | Il sistema deve generare embedding semantici densi per i chunk di testo e supportare il retrieval ibrido, estraendo passaggi testuali fedeli (*Ground Truth*) per ancorare l'interrogazione ai materiali del corso. |
+
+### 3.2.2 Pianificazione dell'Esame
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **FR-004** | Generazione del Piano d'Esame ad Ordinamento Topologico | Il sistema deve calcolare un ordinamento topologico dei nodi concettuali basato sui vincoli di prerequisito (`REQUIRES`), garantendo che i concetti propedeutici vengano verificati prima di quelli avanzati. |
+| **FR-005** | Sintesi Predittiva dei Blueprint delle Domande | Per ciascun concetto nel piano, il sistema deve pre-generare o sintetizzare dinamicamente un set completo di blueprint interrogativi comprendente quesito principale, risposta ideale, punti chiave attesi, sonde di approfondimento e suggerimenti di scaffolding. |
+
+### 3.2.3 Voce in Tempo Reale e Gestione del Dialogo
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **FR-006** | Interrogazione Vocale Bidirezionale Full-Duplex | Il sistema deve condurre un'interrogazione vocale bidirezionale in tempo reale utilizzando il trasporto audio configurato (SmallWebRTC predefinito o WebSocket PCM di fallback) e la pipeline Pipecat. |
+| **FR-007** | Supporto della Pipeline Vocale a Cascata Opzionale | Il sistema deve supportare anche una pipeline vocale sequenziale a cascata (STT → LLM → TTS) configurabile alternativamente a Gemini Live tramite apposito parametro di runtime. |
+| **FR-008** | Gestione Immediata dell'Interruzione Vocale (Barge-In) | Il sistema deve arrestare istantaneamente la riproduzione vocale dell'agente nel momento in cui viene rilevata la voce dello studente (barge-in), prevenendo sovrapposizioni e collisioni conversazionali. |
+| **FR-016** | Instradamento di Controlli, Chiarimenti e Digressioni Fuori Tema | Il sistema deve distinguere una risposta d'esame da comandi di pausa/ripresa/skip, da quesiti di chiarimento pertinenti e da digressioni palesemente fuori tema, instradandoli senza penalità né consumo di tentativi. |
+
+### 3.2.4 Valutazione e Knowledge Tracing
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **FR-009** | Valutazione Sfaccettata delle Risposte dello Studente | Il sistema deve confrontare la trascrizione dello studente con i punti chiave attesi per il quesito attivo e classificare la risposta tramite valutazione diagnostica in categorie tassonomiche (`ACCURATE`, `PARTIAL`, `VAGUE`, `HESITANT`, `MISCONCEPTION`, `MEMORIZED`). |
+| **FR-010** | Scaffolding Dinamico e Approfondimento Mirato | Quando la valutazione evidenzia una risposta parziale, vaga o esitante, il sistema deve selezionare un'opportuna domanda di follow-up o un indizio graduale di scaffolding per stimolare l'auto-correzione dello studente. |
+| **FR-011** | Aggiornamento della Padronanza tramite Bayesian Knowledge Tracing (BKT) | Il sistema deve aggiornare dinamicamente la stima probabilistica di padronanza latente $P(L_t)$ tramite Bayesian Knowledge Tracing (BKT) per il concetto attivo a seguito di ogni valutazione. |
+
+### 3.2.5 Ciclo di Vita della Sessione e Analitica
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **FR-012** | Persistenza Continua dello Stato di Sessione | Il sistema deve salvare sincronicamente lo stato completo della sessione su file persistente a ogni turno, consentendone il ripristino trasparente in caso di disconnessione. |
+| **FR-013** | Pausa e Ripresa della Sessione Vocale e Programmatica | Il sistema deve consentire di mettere in pausa e riprendere la sessione d'esame in qualsiasi momento attraverso operazioni REST e comandi vocali dedicati, preservando l'avanzamento maturato. |
+| **FR-014** | Ripetizioni Adattive su Più Iterazioni e Confronto Longitudinale | Il sistema deve supportare lo storico delle sessioni e il confronto longitudinale tra iterazioni d'esame successive, evidenziando i progressi netti e l'efficacia del recupero sulle aree deboli. |
+| **FR-015** | Navigazione ed Esportazione della Trascrizione del Dialogo | Il sistema deve esporre la trascrizione completa del dialogo annotata turno per turno e i report analitici attraverso le API REST per la consultazione e l'esportazione dal client mobile e CLI. |
+
+---
+
+## 3.3 Requisiti Non Funzionali
+
+### 3.3.1 Usabilità
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **NFR-U-01** | Protocollo Socratico Vocale Naturale | L'esaminatore virtuale deve mantenere un tono conversazionale fluido, turni vocali concisi (non più di due o tre frasi alla volta) e uno stile accademico professionale ed empatico, evitando prolungati monologhi o cadenze robotiche innaturali. |
+| **NFR-U-02** | Interazione a Mani Libere (Hands-Free) | Durante l'interrogazione orale, l'utente deve poter interagire esclusivamente tramite la voce senza necessità di toccare lo schermo, potendo al contempo usufruire di controlli tattili alternativi sull'app in qualsiasi momento. |
+| **NFR-U-03** | Console di Gestione Chiara per Sviluppatori e Docenti | L'interfaccia di gestione a riga di comando per sviluppatori e docenti deve presentare report visivi chiari, indicatori testuali leggibili e schemi a colori intuitivi per verificare istantaneamente lo stato della sessione. |
+
+### 3.3.2 Affidabilità
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **NFR-R-01** | Resilienza e Ripristino Istantaneo della Sessione | Lo stato dell'esame deve essere registrato in modo sicuro a ogni scambio conversazionale, garantendo che a seguito di cadute di rete o chiusure improvvise la sessione sia ripristinabile senza perdere alcun progresso. |
+| **NFR-R-02** | Gestione Elegante di Anomalie e Timeout Esterni | Qualora una chiamata verso i servizi di intelligenza artificiale remoti subisca un ritardo o un errore temporaneo, l'esaminatore deve formulare frasi di raccordo cortesi senza far cadere la connessione audio. |
+| **NFR-R-03** | Disponibilità Continua dei Servizi di Memorizzazione | Il sistema deve poter operare sia interfacciandosi con database remoti dedicati sia affidandosi a motori leggeri integrati localmente in memoria, assicurando la piena operatività dell'ambiente di studio in qualsiasi contesto. |
+
+### 3.3.3 Prestazioni
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **NFR-P-01** | Latenza Conversazionale Reattiva | Il sistema deve minimizzare il tempo intercorrente tra la conclusione del parlato dello studente e l'avvio della risposta vocale dell'esaminatore, assicurando una sensazione di naturalezza nel colloquio d'esame. |
+| **NFR-P-02** | Efficienza della Valutazione Locale | Le operazioni di analisi lessicale, aggiornamento delle stime bayesiane e selezione delle direttive pedagogiche devono completarsi in tempi trascurabili per non introdurre pause avvertibili nel dialogo. |
+| **NFR-P-03** | Scalabilità dell'Ingestion Documentale | L'elaborazione, l'estrazione ontologica e l'indicizzazione dei documenti didattici devono scalare linearmente in base alla lunghezza del testo caricato, fornendo riscontri trasparenti sull'avanzamento. |
+
+### 3.3.4 Supportabilità
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **NFR-S-01** | Tracciamento Diagnostico Strutturato | Il sistema deve registrare log dettagliati su eventi di sessione, transizioni della macchina a stati finiti ed esiti delle valutazioni, garantendo al contempo la riservatezza delle informazioni dell'utente. |
+| **NFR-S-02** | Verificabilità Automatizzata dei Moduli | L'intera logica di analisi pedagogica, calcolo probabilistico BKT e pianificazione topologica deve poter essere validata tramite una suite completa di test automatizzati indipendenti da risorse esterne. |
+| **NFR-S-03** | Standard di Qualità del Codice | Il codice sorgente dell'intero ecosistema deve rispettare rigorosi standard di formattazione, analisi statica e tipizzazione per assicurare leggibilità e facilità di estensione nel tempo. |
+
+### 3.3.5 Vincoli di Implementazione
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **NFR-I-01** | Ambiente di Sviluppo Unificato e Gestione Dipendenze | Il backend deve essere sviluppato adottando un ecosistema moderno ad alte prestazioni con blocco deterministico delle versioni delle librerie terze per garantire la riproducibilità dell'ambiente. |
+| **NFR-I-02** | Integrazione con Framework Multimediale a Streaming Vocale | L'infrastruttura vocale deve basarsi sull'orchestrazione unificata tra il server applicativo principale e il framework specializzato per la gestione dei flussi multimediali e delle pipeline conversazionali. |
+
+### 3.3.6 Interfaccia
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **NFR-IF-01** | Protocolli di Comunicazione Audio | Il client mobile adotta lo standard WebRTC per lo scambio a bassa latenza dei flussi multimediali, con negoziazione automatica di codec e parametri audio, mantenendo attiva una modalità di comunicazione full-duplex con cancellazione del riverbero. |
+| **NFR-IF-02** | Interfacce di Servizio e Controllo | Le comunicazioni strutturate tra applicazione mobile e server applicativo avvengono mediante servizi web conformi ai principi REST per il controllo di sessione e protocolli di segnalazione dedicati per l'inizializzazione dei canali audio. |
+
+### 3.3.7 Confezionamento
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **NFR-PKG-01** | Avvio Unificato dell'Ambiente Locale | Il sistema deve fornire una procedura di inizializzazione semplificata per eseguire l'intero ambiente di backend, inclusi i servizi applicativi e la pipeline vocale, mediante un singolo comando integrato. |
+| **NFR-PKG-02** | Gestione Gerarchica della Configurazione | La configurazione dei parametri di sistema e delle credenziali d'accesso deve supportare una gerarchia sicura, consentendo di sovrascrivere agevolmente le impostazioni globali con preferenze specifiche per l'ambiente locale. |
+
+### 3.3.8 Requisiti Legali
+
+| Id | Nome | Descrizione |
+| :--- | :--- | :--- |
+| **NFR-L-01** | Trattamento Temporaneo dell'Audio Vocale | I flussi sonori grezzi acquisiti durante l'interrogazione non devono essere archiviati a tempo indeterminato senza il consenso esplicito dello studente, in linea con i principi di minimizzazione del dato previsti dalle normative sulla privacy. |
+| **NFR-L-02** | Pseudonimizzazione delle Tracce Didattiche | Tutte le registrazioni delle trascrizioni verbali, i punteggi di padronanza BKT e i verbali analitici devono essere memorizzati collegandoli a identificativi di sessione pseudonimizzati per tutelare l'identità dell'utente. |
+| **NFR-L-03** | Protezione delle Credenziali dei Servizi Cognitivi | Le chiavi d'accesso ai servizi di intelligenza artificiale remoti devono risiedere esclusivamente nella memoria protetta dell'ambiente di esecuzione e non devono mai essere esposte pubblicamente o inserite nel codice sorgente. |
+
+---
+
+## 3.4 Modelli di Sistema
+
+### 3.4.1 Scenari
+
+#### Scenario 1: Caricamento del Documento Didattico e Generazione della Scaletta d'Esame
+* **Attori:** Studente, Modulo di Ingestion Documentale, Pianificatore Didattico.
+* **Precondizioni:** Lo studente ha a disposizione una dispensa universitaria in formato digitale (ad esempio sulle proprietà delle transazioni e della concorrenza nei sistemi di basi di dati).
+* **Flusso degli Eventi:**
+  1. Lo studente carica il testo didattico tramite l'interfaccia dell'applicazione mobile.
+  2. Il server applicativo avvia la catena di elaborazione: il testo viene estratto, bonificato e segmentato in frammenti informativi omogenei.
+  3. L'analizzatore ontologico esamina i frammenti ed estrae i concetti fondamentali (proprietà ACID, livelli di isolamento, serializzabilità e prevenzione dei deadlock), tracciando le reciproche relazioni di propedeuticità logica.
+  4. Le entità concettuali vengono salvate nel grafo della conoscenza della materia e indicizzate vettorialmente.
+  5. Il pianificatore d'esame esamina il grafo, ordina topologicamente gli argomenti e produce per ciascuno la scheda completa di domande aperte, risposte ideali, punti chiave e indizi di scaffolding.
+  6. L'applicazione mobile mostra allo studente la panoramica degli argomenti estratti, consentendogli di avviare il colloquio orale.
+* **Flussi di Errore:** Qualora il file caricato risulti danneggiato, il sistema segnala l'errore e invita al caricamento di un file integro.
+* **Esito Finale:** Base di conoscenza e piano d'esame salvati e pronti per l'interrogazione.
+
+#### Scenario 2: Conduzione dell'Interrogazione Orale e Supporto Graduale (Scaffolding)
+* **Attori:** Studente, Esaminatore Vocale Socratico, Coordinatore della Valutazione.
+* **Precondizioni:** Piano d'esame pronto e sessione vocale a bassa latenza stabilita con successo.
+* **Flusso degli Eventi:**
+  1. Lo studente avvia la simulazione d'esame dall'applicazione mobile; l'esaminatore sintetico porge il saluto introduttivo e propone la prima domanda in programma.
+  2. L'esaminatore chiede: *"Quali principi fondamentali garantiscono che un insieme di operazioni sui dati venga trattato in modo affidabile come una transazione?"*
+  3. Lo studente risponde vocalmente: *"I database usano le proprietà ACID. Ad esempio l'atomicità fa sì che tutte le operazioni vengano eseguite oppure nessuna."*
+  4. Il valutatore diagnostico analizza la trascrizione verbale e rileva che la risposta è corretta ma incompleta rispetto ai punti chiave previsti, avendo tralasciato consistenza, isolamento e durabilità.
+  5. Il coordinatore registra un esito parziale, aggiorna cautamente la stima di competenza BKT e dispone il passaggio a uno stato di focalizzazione causale.
+  6. L'esaminatore sintetico interviene maieuticamente: *"Ottimo inizio sull'atomicità. Cosa puoi dirmi invece riguardo all'isolamento e alla durabilità dei dati al termine della transazione?"*
+  7. Lo studente completa la spiegazione descrivendo come le modifiche sopravvivano ai guasti e come le transazioni concorrenti non debbano interferire tra loro.
+  8. Il sistema riconosce la completa copertura dei punti chiave, incrementa la padronanza BKT e avanza all'argomento successivo.
+* **Esito Finale:** Lo studente riceve un supporto maieutico che lo stimola a completare autonomamente l'argomentazione.
+
+#### Scenario 3: Pausa della Prova e Ripresa Senza Perdita di Dati
+* **Attori:** Studente, Esaminatore Vocale, Modulo di Persistenza della Sessione.
+* **Precondizioni:** Interrogazione in corso con i primi tre argomenti della scaletta già affrontati con successo.
+* **Flusso degli Eventi:**
+  1. Lo studente pronuncia spontaneamente: *"Vorrei fare una pausa di cinque minuti."*
+  2. Il modulo di instradamento intelligente riconosce il comando operativo di controllo, evitando di considerarlo una risposta d'esame e lasciando intatti i punteggi di competenza.
+  3. L'esaminatore conferma la sospensione, commuta lo stato in pausa e salva in modo sincrono e atomico la memoria d'esame (cronologia turni, punteggi BKT e indice corrente della scaletta).
+  4. Lo studente chiude temporaneamente l'applicazione per una pausa.
+  5. Alla riapertura dell'app, lo studente richiede la ripresa dell'esame; il sistema recupera all'istante lo stato salvato e l'esaminatore riprende il colloquio esattamente dall'ultimo argomento rimasto in sospeso.
+* **Esito Finale:** Perfetta continuità didattica senza ripetizioni forzate di domande già superate.
+
+---
+
+### 3.4.2 Modello dei Casi d'Uso
+
+```mermaid
+flowchart TB
+    Student((🎓 Studente))
+
+    subgraph RetainMind_System [Sistema Assistente Orale RetainMind]
+        UC1[Caricamento Materiali Didattici]
+        UC2[Generazione Scaletta d'Esame Topologica]
+        UC3[Conduzione Interrogazione Vocale in Tempo Reale]
+        UC4[Valutazione Diagnostica della Risposta]
+        UC5[Erogazione Supporto Maieutico Scaffolding]
+        UC6[Aggiornamento Padronanza Probabilistica BKT]
+        UC7[Pausa e Ripresa Flessibile della Sessione]
+        UC8[Ripetizione Adattiva dell'Esame]
+        UC9[Ispezione Analitica RCA e Cause Radice]
+        UC10[Consultazione ed Esportazione Verbale d'Esame]
+    end
+
+    Student --> UC1
+    Student --> UC2
     Student --> UC3
     Student --> UC7
     Student --> UC8
+    Student --> UC9
     Student --> UC10
 
-    Admin --> UC1
-    Admin --> UC2
-    Admin --> UC7
-    Admin --> UC8
-    Admin --> UC9
-    Admin --> UC10
-
-    UC3 -.->|includes| UC4
-    UC4 -.->|triggers| UC5
-    UC4 -.->|updates| UC6
-    UC1 -.->|triggers| UC2
+    UC3 -.->|include| UC4
+    UC4 -.->|attiva| UC5
+    UC4 -.->|aggiorna| UC6
+    UC1 -.->|genera| UC2
 ```
 
 ---
 
-### 3.4.3 Object Model
+### 3.4.3 Modello ad Oggetti
 
 ```mermaid
 classDiagram
     class ConceptNode {
-        +String id
-        +String name
-        +String summary
-        +Float mastery_score
-        +Int hesitation_count
-        +Int mistake_count
-        +ConceptStatus status
-        +List~String~ prerequisites
-        +List~String~ contrasts_with
+        +String identificativo_concetto
+        +String nome_esteso
+        +String sintesi_didattica
+        +Float punteggio_padronanza_bkt
+        +Int conteggio_esitazioni
+        +Int conteggio_errori
+        +StatoConcetto stato_apprendimento
+        +List~String~ prerequisiti_logici
+        +List~String~ concetti_in_contrasto
     }
 
     class DocumentChunk {
-        +String chunk_id
-        +String document_id
-        +String section_title
-        +String text
-        +Int token_count
-        +List~String~ concept_ids
+        +String identificativo_frammento
+        +String titolo_sezione_origine
+        +String testo_autentico
+        +Int conteggio_token
+        +List~String~ concetti_associati
     }
 
     class PlannedQuestion {
-        +String question_id
-        +String concept_id
-        +String main_question
-        +String ideal_answer
-        +List~String~ narrowing_questions
-        +List~String~ scaffolding_hints
-        +List~String~ stress_test_questions
-        +List~String~ collision_check_questions
-        +QuestionDifficulty difficulty
+        +String identificativo_domanda
+        +String concetto_bersaglio
+        +String domanda_principale_aperta
+        +String risposta_ideale_canonica
+        +List~String~ punti_chiave_attesi
+        +List~String~ domande_approfondimento_causale
+        +List~String~ indizi_supporto_graduale
+        +List~String~ quesiti_stress_test
+        +List~String~ verifiche_collisione_concettuale
     }
 
     class ConceptPlanItem {
-        +String concept_id
-        +String concept_name
-        +PlannedQuestion planned_question
-        +PlanItemStatus status
-        +Int current_attempt
+        +String identificativo_concetto
+        +PlannedQuestion scheda_domande_pianificate
+        +StatoElementoPiano stato_avanzamento
+        +Int tentativi_effettuati
     }
 
     class DeferredRetryItem {
-        +String concept_id
-        +Int required_correct_answers
-        +Int correct_count_since_deferred
-        +Int retry_cycle
+        +String identificativo_concetto
+        +Int risposte_corrette_necessarie
+        +Int successi_dopo_il_rinvio
+        +Int ciclo_di_revisione
     }
 
     class ExaminationPlan {
-        +String plan_id
-        +String title
-        +List~String~ concept_order
-        +Map~String, ConceptPlanItem~ items
-        +List~DeferredRetryItem~ deferred_queue
-        +Int current_index
-        +Boolean is_completed
-        +progress_percentage() Float
-        +defer_concept(concept_id)
-        +on_correct_answer() String
-        +advance_to_next() ConceptPlanItem
+        +String identificativo_piano
+        +String titolo_insegnamento
+        +List~String~ sequenza_topologica_concetti
+        +Map schede_concetti_pianificate
+        +List~DeferredRetryItem~ coda_concetti_rinviati
+        +Int indice_passo_corrente
+        +Boolean esame_completato
     }
 
     class EvaluationDetail {
-        +EvaluationResultType evaluation_result
-        +String assessed_concept_id
-        +Float confidence
-        +String reasoning
-        +List~String~ expected_key_points
-        +List~String~ missing_concepts
-        +List~String~ missing_concepts
-        +Float pause_duration
-        +Int filler_word_count
+        +TipoEsitoDiagnostico esito_valutazione
+        +Float grado_confidenza
+        +String motivazione_analitica
+        +List~String~ punti_chiave_coperti
+        +List~String~ concetti_omessi_o_errati
+        +Float durata_pausa_iniziale
+        +Int numero_intercalari_esitazione
     }
 
     class SessionAssessmentManager {
-        +String student_id
-        +SessionStatus status
-        +Int current_iteration
-        +List~Dict~ iterations_history
-        +List~Dict~ history
-        +String current_concept_id
-        +PedagogicalState current_pedagogical_state
-        +process_student_turn(transcript, pause)
-        +pause_session(reason)
-        +resume_session()
-        +restart_examination(adapt)
-        +save_session_state(path)
+        +String identificativo_studente
+        +StatoSessione stato_operativo
+        +Int iterazione_esame_corrente
+        +List storico_turni_dialogo
+        +String concetto_attualmente_interrogato
+        +StatoPedagogico stato_macchina_pedagogica
     }
 
     ExaminationPlan "1" *-- "*" ConceptPlanItem
     ExaminationPlan "1" *-- "*" DeferredRetryItem
     ConceptPlanItem "1" *-- "1" PlannedQuestion
-    ConceptNode "1" -- "*" DocumentChunk : linked_to
+    ConceptNode "1" -- "*" DocumentChunk : illustrato_da
     SessionAssessmentManager "1" o-- "1" ExaminationPlan
-    SessionAssessmentManager "1" ..> EvaluationDetail : produces
+    SessionAssessmentManager "1" ..> EvaluationDetail : produce
 ```
 
 ---
 
-### 3.4.4 Dynamic Model
+### 3.4.4 Modello Dinamico
 
-#### Dynamic State Machine: Pedagogical FSM (`src/assessment/fsm.py`)
+#### Diagramma di Sequenza del Turno di Colloquio Vocale
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Student as 🎓 Studente (App Mobile)
+    participant Audio as 🎙️ Ricevitore Audio WebRTC
+    participant Agent as 🤖 Pipeline Vocale Conversazionale
+    participant Manager as ⚙️ Coordinatore di Valutazione
+    participant Eval as 🔍 Valutatore Diagnostico dei Turni
+    participant BKT as 📊 Motore BKT
+    participant Graph as 🕸️ Grafo della Conoscenza
+    participant Storage as 💾 Memoria Persistente di Sessione
+
+    Student->>Audio: Emissione vocale risposta orale
+    Audio->>Agent: Streaming continuo pacchetti audio
+    Agent->>Manager: Notifica turno vocale concluso con trascrizione e pause
+    Manager->>Eval: Richiesta valutazione risposta (trascrizione, concetto attivo, Ground Truth)
+    Eval-->>Manager: Esito diagnostico, copertura punti chiave, rilevamento esitazioni
+    Manager->>BKT: Richiesta aggiornamento padronanza probabilistica
+    BKT->>Graph: Aggiornamento punteggio di competenza sul nodo concettuale
+    Manager->>Manager: Calcolo transizione Macchina a Stati (FSM) ed eventuale rinvio
+    Manager->>Storage: Salvataggio atomico e sincrono dello stato aggiornato
+    Manager-->>Agent: Direttiva pedagogica e contesto didattico per la replica
+    Agent->>Audio: Generazione sintesi vocale dell'esaminatore
+    Audio-->>Student: Riproduzione audio della domanda di follow-up o nuovo argomento
+```
+
+#### Macchina a Stati Finiti (FSM Pedagogica)
 
 ```mermaid
 stateDiagram-v2
-    [*] --> EXPLORATION : Start Question on Scheduled Concept
+    [*] --> EXPLORATION : Avvio Quesito su Concetto da Scaletta
 
-    EXPLORATION --> EXPLORATION : ACCURATE (Advance to Next Concept)
-    EXPLORATION --> CAUSAL_NARROWING : PARTIAL / Incomplete Explanation
-    EXPLORATION --> SCAFFOLDING : HESITANT / VAGUE Answer
-    EXPLORATION --> CONCEPTUAL_COLLISION : MISCONCEPTION Detected
+    EXPLORATION --> EXPLORATION : Risposta Ottima (Avanzamento a Nuovo Argomento)
+    EXPLORATION --> CAUSAL_NARROWING : Risposta Parziale o Spiegazione Superficiale
+    EXPLORATION --> SCAFFOLDING : Eloquio Esitante o Esposizione Molto Vaga
+    EXPLORATION --> CONCEPTUAL_COLLISION : Misconcezione o Confusione Rilevata
 
-    CAUSAL_NARROWING --> EXPLORATION : Complete Answer Provided
-    CAUSAL_NARROWING --> SCAFFOLDING : Still Incomplete (Attempt 2)
-    CAUSAL_NARROWING --> PREREQUISITE_FALLBACK : Consecutive Failures >= 2
+    CAUSAL_NARROWING --> EXPLORATION : Spiegazione Causale Completata
+    CAUSAL_NARROWING --> SCAFFOLDING : Difficolta Persistente
+    CAUSAL_NARROWING --> PREREQUISITE_FALLBACK : Errori Consecutivi Gravi
 
-    SCAFFOLDING --> EXPLORATION : Guided Success
-    SCAFFOLDING --> PREREQUISITE_FALLBACK : Failed Hints (Exhausted Attempts)
+    SCAFFOLDING --> EXPLORATION : Risoluzione Autonoma tramite Indizio
+    SCAFFOLDING --> PREREQUISITE_FALLBACK : Indizi Esauriti senza Progresso
 
-    CONCEPTUAL_COLLISION --> EXPLORATION : Disambiguation Resolved
-    CONCEPTUAL_COLLISION --> SCAFFOLDING : Persistent Confusion
+    CONCEPTUAL_COLLISION --> EXPLORATION : Disambiguazione Risolta con Successo
+    CONCEPTUAL_COLLISION --> SCAFFOLDING : Confusione Persistente
 
-    PREREQUISITE_FALLBACK --> EXPLORATION : Prerequisite Mastered (Retry Main)
-    PREREQUISITE_FALLBACK --> [*] : Concept Deferred to Retry Queue
+    PREREQUISITE_FALLBACK --> EXPLORATION : Basi Consolidate (Ritorno al Concetto Principale)
+    PREREQUISITE_FALLBACK --> [*] : Concetto Rimandato alla Coda di Recupero Finale
 ```
+
+* **Stato `EXPLORATION` (Esplorazione Ordinaria):** Somministrazione standard della domanda aperta principale sul concetto in scaletta.
+* **Stato `CAUSAL_NARROWING` (Focalizzazione Causale):** Richiesta di chiarire i passaggi logici di causa-effetto qualora l'argomentazione sia superficiale.
+* **Stato `SCAFFOLDING` (Supporto Graduale):** Fornitura di indizi sequenziali calibrati per stimolare la deduzione autonoma della risposta corretta.
+* **Stato `CONCEPTUAL_COLLISION` (Disambiguazione Concettuale):** Confronto diretto tra la nozione attiva e il concetto con cui è stata confusa.
+* **Stato `PREREQUISITE_FALLBACK` (Recupero sui Prerequisiti):** Arretramento temporaneo della discussione sui concetti propedeutici a monte in caso di blocchi gravi.
 
 ---
 
-### 3.4.5 User Interface — Navigational Paths and Screen Mock-ups
+### 3.4.5 Interfaccia Utente — Percorsi di Navigazione e Mockup delle Schermate
 
-#### 1. Audio Room & Live Visualizer State Transition
+#### 1. Percorsi di Navigazione dell'Interfaccia Utente
 
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│ 🎓 RetainMind Live Oral Examination Canvas                                 │
-├────────────────────────────────────────────────────────────────────────────┤
-│                                                                            │
-│       ┌────────────────────────────────────────────────────────────┐       │
-│       │ 🔊 STATO ESAME: IN CORSO (Iterazione 1/2)                   │       │
-│       │ Argomento Attivo: [2/67] Transazioni ACID (acid)            │       │
-│       │ Progresso: [████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 14.5%   │       │
-│       └────────────────────────────────────────────────────────────┘       │
-│                                                                            │
-│                    (((( 🎙️ DOCENTE AI STA PARLANDO ))))                    │
-│                                                                            │
-│   "Esatto, hai accennato all'Atomicità. Ma cosa garantisce                 │
-│    l'Isolamento quando due transazioni accedono allo stesso dato?"         │
-│                                                                            │
-│  [Comandi Spontanei: "Pausa", "Riprendiamo", "Ripetiamo", "Salta"]         │
-└────────────────────────────────────────────────────────────────────────────┘
-```
+Il flusso di interazione dell'applicazione mobile guida lo studente attraverso gli stati operativi del percorso di studio:
 
-#### 2. Terminal CLI Management Interface (`session_cli.py`)
+```mermaid
+stateDiagram-v2
+    [*] --> SchermataHome : Avvio Applicazione
+    SchermataHome --> GestioneCorsi : Selezione / Aggiunta Corso
+    GestioneCorsi --> IngestionDocumenti : Caricamento Materiali Didattici
+    IngestionDocumenti --> VisualizzazionePiano : Elaborazione Ontologica & Scaletta Pronta
+    VisualizzazionePiano --> AulaVocaleLive : Inizia Esame Orale
 
-```
-══════════════════════════════════════════════════════════════════════
-🎓 STATO DELLA SESSIONE D'ESAME & TRASCRIZIONE
-══════════════════════════════════════════════════════════════════════
-• ID Studente:          student_default
-• Stato Sessione:       ACTIVE
-• Iterazione Corrente:  1
-• Argomento Attivo:     acid (Transazioni ACID)
-• Progresso Piano:      14.5% (Passo 2/67)
-• Coda di Rinvio:       ['database_nosql']
+    state AulaVocaleLive {
+        [*] --> AscoltoDomanda
+        AscoltoDomanda --> RegistrazioneRisposta : Studente Risponde a Voce
+        RegistrazioneRisposta --> ValutazioneTurno : Fine Parlato / VAD
+        ValutazioneTurno --> ErogazioneScaffolding : Risposta Parziale / Esitante
+        ErogazioneScaffolding --> RegistrazioneRisposta : Nuovo Tentativo Guidato
+        ValutazioneTurno --> AscoltoDomanda : Concetto Superato / Avanzamento
+    }
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 📁 ULTIMI SCAMBI ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔹 [TURNO 2] 10:15:05 | Argomento: Transazioni ACID
-   👨‍🏫 Docente AI: "Cosa garantisce l'Isolamento in un RDBMS?"
-   🎓 Studente:   "L'isolamento fa sì che le transazioni non si disturbino."
-   📋 Esito:      [ACCURATE] (+0.18) | Stato: EXPLORATION
-══════════════════════════════════════════════════════════════════════
+    AulaVocaleLive --> SessioneInPausa : Comando Vocale / Tasto Pausa
+    SessioneInPausa --> AulaVocaleLive : Comando Riprendi
+    AulaVocaleLive --> DashboardReportFinale : Conclusione Esame
+    DashboardReportFinale --> VisualizzazionePiano : Ripetizione Adattiva
+    DashboardReportFinale --> SchermataHome : Ritorno ai Corsi
 ```
 
-#### 3. Flutter Client Architecture & REST and Audio Gateway
+#### 2. Mockup e Struttura delle Schermate Principali
 
-```text
-Flutter client (`lib/`)
-  ├─ ApiService: REST course, plan, session, transcript, and report operations
-  └─ PipecatService: SmallWebRTC microphone/playback by default
-          │ REST + SmallWebRTC media (PCM WebSocket fallback)
-          ▼
-FastAPI (`backend/src/api.py`, port 8000)
-  ├─ `/api/...` REST endpoints
-  ├─ `/ws`, `/ws/{course_id}`, `/ws/test/{course_id}`
-  ├─ SmallWebRTC signaling: `/api/offer`, `/api/session/webrtc`
-  └─ Pipecat voice pipeline (`backend/src/agent.py`)
-```
+L'interfaccia utente è progettata per massimizzare la concentrazione durante il colloquio orale, riducendo al minimo gli elementi di disturbo visivo:
 
+* **Canvas dell'Aula Vocale Live:**
+  * *Barra di Stato Superiore:* Mostra l'insegnamento attivo, lo stato della sessione vocale e l'indicatore percentuale di completamento della prova con barra di avanzamento dinamica.
+  * *Visualizzatore di Stato Acustico:* Elemento circolare centrale che anima pulsazioni visive per segnalare quando l'esaminatore sintetico sta parlando, quando è in corso l'ascolto dello studente o quando è attivo il rilevamento VAD.
+  * *Riquadro del Dialogo Attivo:* Trascrizione ad alta leggibilità dell'ultimo quesito socratico formulato, per supportare la comprensione anche in ambienti rumorosi.
+  * *Pulsantiera dei Controlli Rapidi:* Tasti touch ad alto contrasto per i comandi manuali di supporto (Pausa, Salta Argomento, Concludi Sessione), utilizzabili in alternativa ai comandi vocali a mani libere.
+
+* **Dashboard Analitica del Verbale Finale e Ispezione CLI:**
+  * *Quadro Generale delle Competenze:* Prospetto riepilogativo con metrica di padronanza globale BKT calcolata sull'intero corso.
+  * *Sezione Aree di Fragilità & RCA:* Elenco analitico dei concetti critici con indicazione esplicita della causa radice individuata sui rispettivi prerequisiti nel grafo.
+  * *Cronologia Completa dei Turni:* Registro dettagliato di ciascuno scambio verbale studente-esaminatore, annotato con tempi di risposta, conteggio intercalari di esitazione ed esito diagnostico.
 
 ---
 
-# 4. Glossary
+# 4. Glossario
 
-* **Bayesian Knowledge Tracing (BKT):** Probabilistic user modeling algorithm that maintains a continuous belief state $P(L_t) \in [0, 1]$ representing whether a student has mastered a concept.
-* **ConceptNode:** An ontological entity representing a discrete skill or unit of knowledge in the course curriculum.
-* **Contrasting Concept:** A related technical concept prone to student confusion (e.g., TCP vs. UDP, RDBMS vs. NoSQL, Process vs. Thread).
-* **Deferred Queue:** A cyclic spaced-repetition queue holding concepts on which the student struggled, postponing re-testing until subsequent questions are answered correctly.
-* **Ground Truth Passage:** Verbatim excerpt extracted from textbook literature during ingestion, used to calibrate factual correctness.
-* **Hesitation Biomarker:** Combined metrics of non-lexical vocal pauses and latency intervals indicating low cognitive certainty.
-* **Pipecat:** Python framework used to compose the real-time voice pipeline.
-* **SmallWebRTC:** Default Flutter WebRTC signaling and media transport integrated with the FastAPI service.
-* **WebSocket PCM:** Fallback Flutter audio protocol carrying mono PCM S16LE frames.
-* **Pedagogical Directive:** Real-time prompt instructions dynamically synthesized to guide the AI examiner's exact conversational behavior on the upcoming turn.
-* **Root Cause Analysis (RCA):** Diagnostic algorithm that traces failures on complex concepts down the prerequisite DAG to identify unmastered foundational topics.
-* **Socratic Method:** Pedagogical inquiry style that guides students through targeted questions and counter-examples rather than direct lecturing.
+Il presente glossario raccoglie e definisce formalmente i termini cardine, i concetti pedagogici e le nozioni architetturali utilizzate nella specifica del sistema:
 
----
-
-# 5. Architecture Evolution & Trade-offs
-
-During development, multiple architectural approaches were prototyped, tested, and systematically evaluated:
-
-### 1. Custom Rust Tokio WebSocket Proxy vs. FastAPI and Pipecat
-* *Initial Concept:* Build a custom Rust WebSocket gateway (`flutter_rust_bridge` + Tokio) to route raw Opus audio frames and Protobuf messages.
-* *Encountered Problems:* Significant complexity in managing custom jitter buffers, cross-platform audio device drivers (Oboe/CoreAudio), edge ICE/TURN NAT traversal, and network degradation.
-* *Adopted Solution:* The voice service is integrated into the FastAPI application using **Pipecat**. Flutter uses SmallWebRTC media by default and PCM WebSocket as a fallback. Audio quality and latency remain deployment and device dependent.
-
-### 2. Dual S2S Engine Experimentation (OpenAI Realtime vs. Google Gemini Live)
-* *Initial Concept:* Maintain agnostic dual-streaming adapters for both OpenAI Realtime API and Gemini Live API.
-* *Encountered Problems:* OpenAI Realtime exhibited higher conversational latency on EU routes and less expressive Italian academic prosody.
-* *Adopted Solution:* Gemini Live (`gemini-3.8-live`, voice `Aoede`) is the default. The configurable cascaded STT → LLM → TTS pipeline is optional. Plan/material generation defaults to `gemini-3.5-flash-lite`, independently of the voice model.
-
-### 3. Static Flashcard Spaced Repetition (v-SM2) vs. Dynamic BKT + Ontological FSM
-* *Initial Concept:* Calculate discrete review day intervals using a voice-penalized SM-2 formula ($I(n) = I(n-1) \cdot EF'$).
-* *Encountered Problems:* SM-2 is designed for batch flashcard review across days/weeks, failing to provide immediate pedagogical guidance or multi-hop prerequisite tracing during an active 30-minute oral exam.
-* *Adopted Solution:* Implemented **Bayesian Knowledge Tracing (BKT)** coupled with an **Ontological Pedagogical FSM** and a **Cyclic Deferred Queue**. This allows the system to adjust mastery dynamically per turn, offer real-time scaffolding, and pinpoint root-cause prerequisite failures.
-
----
-
-# 6. Configuration Analysis & Matrix
-
-Backend behavior is governed by configuration loaded from `.env.local` (when present) or `.env` via `VoiceAgentConfig` (`src/config.py`). Flutter compile-time options are identified separately in the matrix.
-
-| Variable Name | Type / Allowed Values | Default Value | Operational Purpose & Architectural Impact |
-| :--- | :--- | :--- | :--- |
-| `AGENT_PIPELINE_MODE` | `gemini_live` \| `cascaded` | `gemini_live` | Selects the voice pipeline. Gemini Live is the default; `cascaded` runs STT → LLM → TTS when explicitly selected. |
-| `GEMINI_LIVE_MODEL` | String | `gemini-3.8-live` | Model selected when `AGENT_PIPELINE_MODE=gemini_live`. |
-| `PLAN_GENERATION_MODEL` | String | `gemini-3.5-flash-lite` | Default model for topic/material extraction and plan generation. |
-| `USE_WEBRTC_AUDIO` | Flutter `--dart-define` Boolean | `true` | Uses SmallWebRTC by default; set to `false` at Flutter build/run time to use WebSocket PCM. |
-| `WEBRTC_MODE` | String | `smallwebrtc` | Backend-reported WebRTC transport mode; signaling is implemented by Pipecat SmallWebRTC. |
-| `WS_SAMPLE_RATE` | Integer | `16000` | Input sample rate for WebSocket PCM fallback. |
-| `AUDIO_SAMPLE_RATE` | Integer | `24000` | Configured output sample rate for the WebSocket PCM pipeline. |
-| `GEMINI_VOICE` | String | `Aoede` | Voice selection for Gemini Live mode. |
-| `GOOGLE_API_KEY` | String (Secret) | `""` | Authentication key for Google generation services and Gemini Live. |
-| `EMBEDDING_PROVIDER` | String | `mock` | Embedding implementation selected by the RAG configuration. |
-| `EMBEDDING_DIMENSION` | Integer | `384` | Vector dimension configured for the embedding store. |
-| `AGENT_STT_MODEL` | String | `deepgram/nova-3` | Streaming Speech-to-Text model for cascaded mode. |
-| `AGENT_LLM_MODEL` | String | `google/gemma-4-31b-it` | Primary reasoning LLM for cascaded voice mode. |
-| `AGENT_TTS_MODEL` | String | `elevenlabs/eleven_turbo_v2_5` | Primary Text-to-Speech synthesis engine for cascaded mode. |
-| `NEO4J_URI` | Bolt URI (`bolt://...`) | `bolt://localhost:7687` | Neo4j Graph Database connection string. Optional graph-store connection; in-memory stores are available. |
-| `QDRANT_URL` | HTTP URI (`http://...`) | `http://localhost:6333` | Qdrant Vector Database endpoint. Optional vector-store connection; in-memory stores are available. |
-| `BKT_INIT_MASTERY` | Float ($0.0 - 1.0$) | `0.50` | Prior probability $P(L_0)$ for untested concepts. |
-| `BKT_ACCURATE_GAIN` | Float ($0.0 - 1.0$) | `0.35` | Mastery transit gain $P(T)$ upon accurate student explanation. |
-| `BKT_MISTAKE_DECAY` | Float ($0.0 - 1.0$) | `0.60` | Mastery penalty multiplier applied when critical mistakes or misconceptions occur. |
-| `VERBOSE_REQUESTS` | Boolean (`true` \| `false`) | `true` | Enables rich structured terminal banner logging for evaluations, BKT deltas, and FSM transitions. |
-
-`USE_WEBRTC_AUDIO` is a Flutter compile-time setting passed with `--dart-define`; it is not a backend environment variable in `VoiceAgentConfig`.
-
----
-
-# 7. Final Verification & Validation Summary
-
-This RAD documents the current implementation but is not a record of a fresh device or provider integration run. Verify requirements against the current source and run relevant checks before release. Flutter uses SmallWebRTC voice by default with WebSocket PCM fallback; FastAPI serves the Pipecat pipeline; plan generation defaults to `gemini-3.5-flash-lite`. Android's active audio configuration uses media/music output attributes while keeping WebRTC capture/routing in communication mode.
+* **Analisi Acustico-Temporale:** Tecnica di elaborazione del parlato volta a misurare parametri prosodici e temporali, quali la durata del silenzio trascorso prima della risposta e la frequenza di riempitivi verbali (*filler words*), per valutare la sicurezza espositiva dello studente.
+* **Barge-in (Interruzione Spontanea):** Capacità del sottosistema audio di arrestare istantaneamente la sintesi vocale dell'esaminatore nel momento esatto in cui viene rilevata la voce dell'utente, prevenendo sovrapposizioni e riproducendo la naturalezza del dialogo umano.
+* **Bayesian Knowledge Tracing (BKT):** Modello matematico probabilistico a rete bayesiana che stima in tempo reale la probabilità latente $P(L_t)$ che uno studente abbia interiorizzato stabilmente un concetto, tenendo conto di sviste accidentali (*slip*) o risposte esatte casuali (*guess*).
+* **Blueprint delle Domande:** Scheda didattica pre-calcolata associata a ciascun concetto della scaletta, comprendente la domanda aperta principale, la spiegazione ideale, i punti chiave irrinunciabili, le sonde di approfondimento e gli indizi di scaffolding.
+* **Coda di Rinvio Ciclica (Deferred Retry Queue):** Registro dinamico in cui confluiscono temporaneamente i concetti su cui lo studente ha manifestato incertezze o che ha chiesto di saltare, per essere riproposti verso il termine della sessione.
+* **Collisione Concettuale (Conceptual Collision):** Situazione in cui lo studente confonde il concetto interrogato con una nozione correlata o apparentemente simile collegata da un arco ontologico di contrasto.
+* **Directed Acyclic Graph (DAG):** Grafo orientato privo di cicli in cui i nodi rappresentano i concetti didattici e gli archi orientati definiscono i vincoli di propedeuticità logica necessaria.
+* **Esaminatore Socratico Autonomo:** Agente intelligente che conduce la prova orale adottando il metodo maieutico socratico, ponendo domande aperte, ascoltando le risposte e guidando lo studente all'auto-correzione tramite indizi progressivi.
+* **Finite State Machine Pedagogica (FSM):** Macchina a stati finiti deterministica che disciplina la postura e la strategia educativa dell'esaminatore (esplorazione, focalizzazione causale, supporto graduale, disambiguazione e recupero sui prerequisiti).
+* **GraphRAG (Hybrid Retrieval-Augmented Generation):** Architettura di reperimento informativo che integra l'esplorazione simbolica del grafo ontologico con la ricerca per similarità semantica su indici vettoriali densi.
+* **Ground Truth (Verità di Riferimento):** Insieme delle definizioni e dei passaggi testuali fedeli estratti direttamente dai materiali didattici caricati dallo studente, utilizzati come metro oggettivo di validazione delle risposte.
+* **Ingestion Documentale:** Procedura automatizzata di importazione, parsing, bonifica e segmentazione dei file didattici per renderli strutturati e interrogabili.
+* **Ordinamento Topologico:** Algoritmo matematico che ordina linearmente i nodi di un DAG in modo tale che ogni concetto propedeutico preceda sempre i concetti avanzati che dipendono da esso.
+* **Persistenza Continua e Atomica:** Meccanismo di salvataggio sincrono dello stato completo della sessione a ogni turno conversazionale, garantendo l'integrità del percorso d'esame contro cadute di connessione o chiusure impreviste.
+* **Prerequisito Logico (`REQUIRES`):** Relazione ontologica formale che vincola la comprensione di un concetto avanzato alla preventiva assimilazione di una nozione di base.
+* **Root Cause Analysis (RCA):** Procedura di risalita a ritroso del grafo della conoscenza che identifica l'origine causale profonda di un fallimento su un tema complesso in una lacuna pregressa su un concetto propedeutico.
+* **Scaffolding Didattico:** Metodologia educativa che fornisce allo studente aiuti parziali e progressivi per colmare un'incertezza, stimolandolo a dedurre autonomamente la soluzione.
+* **Segmentazione Semantica (Chunking):** Partizionamento del testo continuo in blocchi informativi omogenei e autosufficienti con sovrapposizione controllata tra frammenti adiacenti.
+* **Turn Routing (Instradamento dei Turni):** Classificazione preventiva dell'intento comunicativo dello studente per distinguere comandi di controllo, richieste di chiarimento e digressioni dalle reali risposte accademiche d'esame.
+* **Voice Activity Detection (VAD):** Algoritmo di analisi del segnale acustico capace di discriminare in tempo reale il parlato umano dal silenzio e dai rumori ambientali.
+* **WebRTC:** Protocollo di comunicazione peer-to-peer per lo streaming bidirezionale di flussi multimediali a bassissima latenza.

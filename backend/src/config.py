@@ -61,7 +61,7 @@ class VoiceAgentConfig:
         "PLAN_GENERATION_MODEL", "gemini-3.5-flash-lite"
     )
     # VAD & Turn Detection
-    vad_silence_duration_ms: int = int(os.getenv("VAD_SILENCE_DURATION_MS", "850"))
+    vad_silence_duration_ms: int = int(os.getenv("VAD_SILENCE_DURATION_MS", "500"))
     vad_prefix_padding_ms: int = int(os.getenv("VAD_PREFIX_PADDING_MS", "300"))
     vad_start_sensitivity: str = os.getenv("VAD_START_SENSITIVITY", "HIGH")
     vad_end_sensitivity: str = os.getenv("VAD_END_SENSITIVITY", "LOW")

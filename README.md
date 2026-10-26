@@ -46,7 +46,7 @@ retain_mind/
 │
 ├── docs/                             # Documentazione formale di progetto
 │   ├── RetainMind_RAD.md             # Requirements Analysis Document (RAD) completo
-│   └── RetainMind_Business_Model_Canvas.md
+│   └── RetainMind_BMC.md             # Business Model Canvas (BMC) strategico e di mercato
 │
 └── backend/                          # Backend FastAPI + Pipecat (Python)
     ├── src/
